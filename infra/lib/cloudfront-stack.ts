@@ -78,6 +78,7 @@ export class CloudFrontStack extends cdk.Stack {
         hostedZoneId: props.hostedZoneId,
         zoneName: props.hostedZoneName,
       }),
+      recordName: props.appDomain,
       target: route53.RecordTarget.fromAlias(
         new targets.CloudFrontTarget(distribution)
       ),
