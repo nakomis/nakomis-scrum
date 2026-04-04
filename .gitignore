@@ -1,0 +1,10 @@
+node_modules/
+dist/
+cdk.out/
+*.out/
+.env
+.env.local
+*.js.map
+*.d.ts
+*.tsbuildinfo
+vite.config.js

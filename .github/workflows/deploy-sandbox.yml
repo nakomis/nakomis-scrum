@@ -1,0 +1,73 @@
+name: Deploy Sandbox
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies in infra/
+        run: npm ci --prefix infra/
+
+      - name: Run tests in infra/
+        run: npm test --prefix infra/
+
+      - name: Install dependencies in web/
+        run: npm ci --prefix web/
+
+      - name: Build web app
+        run: npm run build --prefix web/
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Configure AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_SANDBOX_ROLE_ARN }}
+          aws-region: eu-west-2
+
+      - name: Install CDK globally
+        run: npm install -g aws-cdk
+
+      - name: Install dependencies in infra/
+        run: npm ci --prefix infra/
+
+      - name: Build infra app
+        run: npm run build --prefix infra/
+
+      - name: Deploy CDK stack to sandbox environment
+        run: npx cdk deploy --all --require-approval never
+        env:
+          CDK_ENV: sandbox
+          AWS_PROFILE: ''
+
+      - name: Upload web/dist to S3
+        run: |
+          BUCKET=$(aws cloudformation describe-stacks --stack-name NakomisScrum-Sandbox-CloudFront --query "Stacks[0].Outputs[?OutputKey=='BucketName'].OutputValue" --output text)
+          aws s3 sync web/dist s3://$BUCKET --delete
+
+      - name: Invalidate CloudFront distribution
+        run: |
+          DIST_ID=$(aws cloudformation describe-stacks --stack-name NakomisScrum-Sandbox-CloudFront --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue" --output text)
+          aws cloudfront create-invalidation --distribution-id $DIST_ID --paths '/*'
