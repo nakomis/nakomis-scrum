@@ -68,7 +68,20 @@ const AdminDashboard: React.FC = () => {
           <CircularProgress />
         ) : (
           <>
-            <Button variant="contained" onClick={() => navigate('/admin/create-session')}>
+            <Button variant="contained" onClick={async () => {
+              const res = await fetch(`${import.meta.env.VITE_API_URL}/sessions`, {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${auth.user?.access_token}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ name: 'New Session' }),
+              });
+              if (res.ok) {
+                const session = await res.json();
+                navigate(`/admin/session/${session.sessionId}`);
+              }
+            }}>
               Create New Session
             </Button>
             <List>
