@@ -58,7 +58,7 @@ export class CloudFrontStack extends cdk.Stack {
       },
       additionalBehaviors: {
         "/api/*": {
-          origin: new origins.HttpOrigin(props.apiStack.api.apiEndpoint, {
+          origin: new origins.HttpOrigin(cdk.Fn.select(1, cdk.Fn.split("://", props.apiStack.api.apiEndpoint)), {
             httpPort: 80,
             httpsPort: 443,
             protocolPolicy: cloudfront.OriginProtocolPolicy.HTTPS_ONLY,
