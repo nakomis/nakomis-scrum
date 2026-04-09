@@ -84,6 +84,7 @@ export class ApiStack extends cdk.Stack {
       },
     });
 
+    this.api.addRoutes({ path: "/sessions", methods: [apigwv2.HttpMethod.GET], integration: new integrations.HttpLambdaIntegration("SessionsList", sessionsHandler), authorizer });
     this.api.addRoutes({ path: "/sessions", methods: [apigwv2.HttpMethod.POST], integration: new integrations.HttpLambdaIntegration("SessionsPost", sessionsHandler), authorizer });
     this.api.addRoutes({ path: "/sessions/{id}", methods: [apigwv2.HttpMethod.GET], integration: new integrations.HttpLambdaIntegration("SessionsGet", sessionsHandler), authorizer });
     this.api.addRoutes({ path: "/sessions/{id}/names", methods: [apigwv2.HttpMethod.PATCH], integration: new integrations.HttpLambdaIntegration("SessionsNamesPatch", sessionsHandler), authorizer });

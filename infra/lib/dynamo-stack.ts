@@ -56,6 +56,11 @@ export class DynamoStack extends cdk.Stack {
       partitionKey: { name: "orgId", type: dynamodb.AttributeType.STRING },
       projectionType: dynamodb.ProjectionType.ALL,
     });
+    this.sessionsTable.addGlobalSecondaryIndex({
+      indexName: "adminId-index",
+      partitionKey: { name: "adminId", type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
 
     this.wsConnectionsTable = new dynamodb.Table(this, "WsConnectionsTable", {
       partitionKey: { name: "sessionId", type: dynamodb.AttributeType.STRING },

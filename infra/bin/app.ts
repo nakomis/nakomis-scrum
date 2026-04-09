@@ -6,28 +6,30 @@ import { ApiStack } from "../lib/api-stack";
 import { WebSocketStack } from "../lib/websocket-stack";
 import { CloudFrontStack } from "../lib/cloudfront-stack";
 
+if (!process.env.CDK_ENV) {
+  throw new Error("CDK_ENV must be set to 'sandbox' or 'prod'");
+}
+
 const app = new cdk.App();
 
 const isProd = process.env.CDK_ENV === "prod";
 
 const env: cdk.Environment = {
-  account: isProd ? "637423226886" : "975050268859",
-  region: "eu-west-2",
+  account: process.env.CDK_DEFAULT_ACCOUNT,
+  region: process.env.CDK_DEFAULT_REGION ?? "eu-west-2",
 };
 
 const certEnv: cdk.Environment = { account: env.account, region: "us-east-1" };
 
-const appDomain = isProd ? "scrum.nakomis.com" : "scrum.sandbox.nakomis.com";
-const hostedZoneId = isProd ? "Z019437529YGFB53BDUGR" : "Z0078393YEDJ63T1OVLB";
-const hostedZoneName = isProd ? "nakomis.com" : "sandbox.nakomis.com";
+const rootDomain = isProd ? "nakomis.com" : "sandbox.nakomis.com";
+const appDomain = `scrum.${rootDomain}`;
 const nakomAdminPoolId = "eu-west-2_Fqgp2dltb"; // always the prod admin pool
 
 const certificateStack = new CertificateStack(app, "NakomisScrumCertificate", {
   env: certEnv,
   crossRegionReferences: true,
   appDomain,
-  hostedZoneId,
-  hostedZoneName,
+  rootDomain,
 });
 
 const cognitoStack = new CognitoStack(app, "NakomisScrumCognito", {
@@ -61,8 +63,7 @@ const cloudFrontStack = new CloudFrontStack(app, "NakomisScrumCloudFront", {
   apiStack,
   webSocketStack,
   appDomain,
-  hostedZoneId,
-  hostedZoneName,
+  rootDomain,
 });
 
 // Dependencies

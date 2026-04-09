@@ -15,8 +15,7 @@ interface CloudFrontStackProps extends cdk.StackProps {
   apiStack: ApiStack;
   webSocketStack: WebSocketStack;
   appDomain: string;
-  hostedZoneId: string;
-  hostedZoneName: string;
+  rootDomain: string;
 }
 
 export class CloudFrontStack extends cdk.Stack {
@@ -73,16 +72,19 @@ export class CloudFrontStack extends cdk.Stack {
       },
     });
 
-    new route53.ARecord(this, "SiteARecord", {
-      zone: route53.HostedZone.fromHostedZoneAttributes(this, "HostedZone", {
-        hostedZoneId: props.hostedZoneId,
-        zoneName: props.hostedZoneName,
+    const aRecord = new route53.ARecord(this, "SiteARecord", {
+      zone: route53.HostedZone.fromLookup(this, "HostedZone", {
+        domainName: props.rootDomain,
       }),
       recordName: props.appDomain,
       target: route53.RecordTarget.fromAlias(
         new targets.CloudFrontTarget(distribution)
       ),
     });
+    // The previous zone (Z0078393YEDJ63T1OVLB) was deleted before CloudFormation could clean
+    // up its reference to this record. RETAIN prevents CloudFormation from trying to delete
+    // the old record on replace, which would fail with NoSuchHostedZone.
+    (aRecord.node.defaultChild as cdk.CfnResource).cfnOptions.updateReplacePolicy = cdk.CfnDeletionPolicy.RETAIN;
 
     new s3deploy.BucketDeployment(this, "DeploySite", {
       sources: [s3deploy.Source.asset("../web/dist")],

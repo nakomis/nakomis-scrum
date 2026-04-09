@@ -2,8 +2,12 @@ node_modules/
 dist/
 cdk.out/
 *.out/
+infra/cdk.context.json
 .env
 .env.local
+web/.env.sandbox
+web/.env.prod
+web/.env.localhost
 *.js.map
 *.d.ts
 *.tsbuildinfo
