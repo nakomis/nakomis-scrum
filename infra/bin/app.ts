@@ -25,24 +25,11 @@ const rootDomain = isProd ? "nakomis.com" : "sandbox.nakomis.com";
 const appDomain = `scrum.${rootDomain}`;
 const nakomAdminPoolId = "eu-west-2_Fqgp2dltb"; // always the prod admin pool
 
-// NOTE: cert stack uses fromHostedZoneAttributes to avoid replacing an already-validated
-// certificate when the zone lookup resolves differently. The hostedZoneId here must match
-// whatever zone ID was used when the certificate was originally created — changing it forces
-// cert replacement and breaks the cross-region ExportsWriter. The CloudFront stack uses
-// fromLookup independently for the ARecord, which is what actually matters for DNS routing.
-// Sandbox: keep the zone ID that was used when the certificate was originally created
-// (Z0078393YEDJ63T1OVLB — the now-deleted spurious zone). Changing this forces ACM to
-// replace the certificate, which breaks the cross-region ExportsWriter. The cert is already
-// validated; the zone ID here has no runtime effect. Update this only when intentionally
-// replacing the certificate (e.g. on a clean prod deployment).
-const certHostedZoneId = isProd ? "Z019437529YGFB53BDUGR" : "Z0078393YEDJ63T1OVLB";
-
 const certificateStack = new CertificateStack(app, "NakomisScrumCertificate", {
   env: certEnv,
   crossRegionReferences: true,
   appDomain,
-  hostedZoneId: certHostedZoneId,
-  hostedZoneName: rootDomain,
+  rootDomain,
 });
 
 const cognitoStack = new CognitoStack(app, "NakomisScrumCognito", {

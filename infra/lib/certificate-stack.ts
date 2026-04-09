@@ -5,8 +5,7 @@ import * as route53 from "aws-cdk-lib/aws-route53";
 
 export interface CertificateStackProps extends cdk.StackProps {
   appDomain: string;
-  hostedZoneId: string;
-  hostedZoneName: string;
+  rootDomain: string;
 }
 
 export class CertificateStack extends cdk.Stack {
@@ -15,9 +14,8 @@ export class CertificateStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: CertificateStackProps) {
     super(scope, id, props);
 
-    const hostedZone = route53.HostedZone.fromHostedZoneAttributes(this, "HostedZone", {
-      hostedZoneId: props.hostedZoneId,
-      zoneName: props.hostedZoneName,
+    const hostedZone = route53.HostedZone.fromLookup(this, "HostedZone", {
+      domainName: props.rootDomain,
     });
 
     this.certificate = new acm.Certificate(this, "ScrumCertificate", {
