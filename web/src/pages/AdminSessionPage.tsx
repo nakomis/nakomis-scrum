@@ -37,7 +37,7 @@ const AdminSessionPage: React.FC = () => {
     const token = user?.access_token;
     if (token && sessionId) {
       socketRef.current = new WebSocket(
-        `${import.meta.env.VITE_WS_URL}/prod?token=${token}&sessionId=${sessionId}&role=admin`
+        `${import.meta.env.VITE_WS_URL}?token=${token}&sessionId=${sessionId}&role=admin`
       );
 
       socketRef.current.onmessage = (event) => {
@@ -93,7 +93,7 @@ const AdminSessionPage: React.FC = () => {
 
   const generateMagicLink = async () => {
     const response = await fetch(`${import.meta.env.VITE_API_URL}/sessions/${sessionId}/magic-link`, {
-      method: 'GET',
+      method: 'POST',
       headers: {
         Authorization: `Bearer ${user?.access_token}`,
       },

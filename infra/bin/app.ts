@@ -18,12 +18,13 @@ const env: cdk.Environment = {
 const certEnv: cdk.Environment = { account: env.account, region: "us-east-1" };
 
 const appDomain = isProd ? "scrum.nakomis.com" : "scrum.sandbox.nakomis.com";
-const hostedZoneId = isProd ? "Z019437529YGFB53BDUGR" : "Z03586633NXU18LFL0JTL";
+const hostedZoneId = isProd ? "Z019437529YGFB53BDUGR" : "Z0078393YEDJ63T1OVLB";
 const hostedZoneName = isProd ? "nakomis.com" : "sandbox.nakomis.com";
 const nakomAdminPoolId = "eu-west-2_Fqgp2dltb"; // always the prod admin pool
 
 const certificateStack = new CertificateStack(app, "NakomisScrumCertificate", {
   env: certEnv,
+  crossRegionReferences: true,
   appDomain,
   hostedZoneId,
   hostedZoneName,
@@ -55,6 +56,7 @@ const webSocketStack = new WebSocketStack(app, "NakomisScrumWebSocket", {
 
 const cloudFrontStack = new CloudFrontStack(app, "NakomisScrumCloudFront", {
   env,
+  crossRegionReferences: true,
   certificateStack,
   apiStack,
   webSocketStack,

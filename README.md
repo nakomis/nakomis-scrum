@@ -2,6 +2,12 @@
 
 **A free and open-source scrum tool for teams, built for real-time collaboration.**
 
+## Support
+
+If you find this useful, please consider buying me a coffee:
+
+[![Donate with PayPal](https://www.paypalobjects.com/en_GB/i/btn/btn_donate_SM.gif)](https://www.paypal.com/donate?hosted_button_id=Q3BESC73EWVNN)
+
 ## Features
 
 - **Multi-Org, Multi-Admin Tenancy:** Seamlessly manage multiple organisations and delegate admin access.

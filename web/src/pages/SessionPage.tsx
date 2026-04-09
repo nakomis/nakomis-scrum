@@ -16,7 +16,7 @@ const SessionPage: React.FC = () => {
   useEffect(() => {
     if (!sessionId || !displayName) return;
 
-    const socketUrl = `${import.meta.env.VITE_WS_URL}/prod?sessionId=${sessionId}&displayName=${encodeURIComponent(displayName)}&token=${token}&role=participant`;
+    const socketUrl = `${import.meta.env.VITE_WS_URL}?sessionId=${sessionId}&displayName=${encodeURIComponent(displayName)}&token=${token}&role=participant`;
     const socket = new WebSocket(socketUrl);
     socketRef.current = socket;
 
