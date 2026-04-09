@@ -11,19 +11,31 @@ const SPIN_HISTORY_TABLE = process.env.SPIN_HISTORY_TABLE!;
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   const routeKey = event.routeKey;
   const sessionId = event.pathParameters?.id;
-  const authorizationHeader = event.headers.Authorization;
-  const jwtPayloadBase64 = authorizationHeader ? authorizationHeader.split('.')[1] : '';
-  const adminId = JSON.parse(Buffer.from(jwtPayloadBase64, 'base64').toString()).sub;
+  const authorizationHeader = event.headers.authorization ?? event.headers.Authorization ?? '';
+  const jwtPayloadBase64 = authorizationHeader.split('.')[1] ?? '';
+  const adminId = jwtPayloadBase64
+    ? JSON.parse(Buffer.from(jwtPayloadBase64, 'base64url').toString()).sub
+    : '';
 
   try {
     switch (routeKey) {
+      case "GET /sessions": {
+        const result = await ddb.send(new QueryCommand({
+          TableName: SESSION_TABLE,
+          IndexName: 'adminId-index',
+          KeyConditionExpression: 'adminId = :adminId',
+          ExpressionAttributeValues: { ':adminId': adminId },
+        }));
+        return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify(result.Items ?? []) };
+      }
       case "POST /sessions": {
-        const { orgId, nameListId } = JSON.parse(event.body!);
+        const body = event.body ? JSON.parse(event.body) : {};
+        const { name = 'New Session' } = body;
         const newSessionId = crypto.randomUUID();
         const createdAt = Date.now();
         await ddb.send(new PutCommand({
           TableName: SESSION_TABLE,
-          Item: { sessionId: newSessionId, orgId, adminId, status: "active", nameListSnapshot: [], createdAt }
+          Item: { sessionId: newSessionId, name, adminId, status: "active", nameListSnapshot: [], createdAt }
         }));
         return { statusCode: 201, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId: newSessionId }) };
       }
@@ -52,7 +64,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         const winner = session.Item.nameListSnapshot[Math.floor(Math.random() * session.Item.nameListSnapshot.length)];
         await ddb.send(new PutCommand({
           TableName: SPIN_HISTORY_TABLE,
-          Item: { sessionId, sk: `${Date.now()}#${crypto.randomUUID()}`, winner, nameSnapshot: JSON.stringify(session.Item.nameListSnapshot), timestamp: Date.now() }
+          Item: { sessionId, "timestamp#spinId": `${Date.now()}#${crypto.randomUUID()}`, winner, nameSnapshot: JSON.stringify(session.Item.nameListSnapshot), timestamp: Date.now() }
         }));
         return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ winner }) };
       }
