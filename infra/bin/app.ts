@@ -1,4 +1,5 @@
 import * as cdk from "aws-cdk-lib";
+import * as fs from 'fs';
 import { CertificateStack } from "../lib/certificate-stack";
 import { CognitoStack } from "../lib/cognito-stack";
 import { DynamoStack } from "../lib/dynamo-stack";
@@ -72,5 +73,7 @@ apiStack.addDependency(dynamoStack);
 webSocketStack.addDependency(dynamoStack);
 cloudFrontStack.addDependency(certificateStack);
 
-cdk.Tags.of(app).add("Project", "nakomis-scrum");
-cdk.Tags.of(app).add("Environment", process.env.CDK_ENV ?? "sandbox");
+const { version: infraVersion } = JSON.parse(fs.readFileSync('./version.json', 'utf-8'));
+cdk.Tags.of(app).add('MH-Project', 'nakomis-scrum');
+cdk.Tags.of(app).add('MH-Version', infraVersion);
+cdk.Tags.of(app).add('Environment', process.env.CDK_ENV ?? 'sandbox');
