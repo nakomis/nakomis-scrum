@@ -26,7 +26,7 @@ const JoinSessionPage = () => {
         );
         const payload: TokenPayload = JSON.parse(jsonPayload);
         setSessionId(payload.sessionId);
-      } catch (error) {
+      } catch {
         console.error('Invalid token');
       }
     }

@@ -1,6 +1,5 @@
 import {
   APIGatewayProxyWebsocketEventV2,
-  APIGatewayProxyResultV2,
   APIGatewayProxyWebsocketHandlerV2,
 } from 'aws-lambda';
 import crypto from 'crypto';
@@ -21,7 +20,15 @@ const apigwClient = new ApiGatewayManagementApiClient({ endpoint: process.env.WS
 const WS_CONNECTIONS_TABLE = process.env.WS_CONNECTIONS_TABLE!;
 const SESSIONS_TABLE = process.env.SESSIONS_TABLE!;
 const SPIN_HISTORY_TABLE = process.env.SPIN_HISTORY_TABLE!;
-const WS_CALLBACK_URL = process.env.WS_CALLBACK_URL!;
+
+// Session ID placed on the request context by the Lambda authoriser
+type AuthorisedRequestContext = APIGatewayProxyWebsocketEventV2['requestContext'] & {
+  authorizer?: { lambda?: { session_id?: string } };
+};
+
+function sessionIdFrom(event: APIGatewayProxyWebsocketEventV2): string | undefined {
+  return (event.requestContext as AuthorisedRequestContext).authorizer?.lambda?.session_id;
+}
 
 async function broadcastMessage(sessionId: string, message: object) {
   const params = {
@@ -44,7 +51,7 @@ async function broadcastMessage(sessionId: string, message: object) {
       });
       await apigwClient.send(postToConnectionCommand);
     } catch (e) {
-      if ((e as any).statusCode === 410) {
+      if ((e as { statusCode?: number }).statusCode === 410) {
         const deleteCommand = new DeleteCommand({
           TableName: WS_CONNECTIONS_TABLE,
           Key: { sessionId: connection.sessionId, connectionId: connection.connectionId },
@@ -69,7 +76,7 @@ async function handleJoin(
   displayName: string
 ): Promise<void> {
   const connectionId = event.requestContext.connectionId;
-  const sessionId = (event.requestContext as any).authorizer?.lambda?.session_id;
+  const sessionId = sessionIdFrom(event);
 
   const command = new PutCommand({
     TableName: WS_CONNECTIONS_TABLE,
@@ -91,7 +98,7 @@ async function handleSpin(
   event: APIGatewayProxyWebsocketEventV2,
   names: string[]
 ): Promise<void> {
-  const sessionId = (event.requestContext as any).authorizer?.lambda?.session_id!;
+  const sessionId = sessionIdFrom(event)!;
   const connectionId = event.requestContext.connectionId;
   const role = await getRoleFromConnection(sessionId, connectionId);
 
@@ -122,7 +129,7 @@ async function handleUpdateNames(
   event: APIGatewayProxyWebsocketEventV2,
   names: string[]
 ): Promise<void> {
-  const sessionId = (event.requestContext as any).authorizer?.lambda?.session_id!;
+  const sessionId = sessionIdFrom(event)!;
   const connectionId = event.requestContext.connectionId;
   const role = await getRoleFromConnection(sessionId, connectionId);
 

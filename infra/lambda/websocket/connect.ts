@@ -3,12 +3,17 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import crypto from 'crypto';
 
+// $connect events carry the query string, which the WebSocket event type omits
+type ConnectEvent = APIGatewayProxyWebsocketEventV2 & {
+    queryStringParameters?: Record<string, string | undefined>;
+};
+
 const ddbClient = new DynamoDBClient({});
 const ddbDocClient = DynamoDBDocumentClient.from(ddbClient);
 
 export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event): Promise<APIGatewayProxyResultV2> => {
     try {
-        const qs = (event as any).queryStringParameters || {};
+        const qs = (event as ConnectEvent).queryStringParameters || {};
         const { sessionId, role, token } = qs as { sessionId?: string; role?: string; token?: string };
 
         if (!sessionId || !role || !token) {
@@ -32,6 +37,8 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event): Promise
             userId = payload.sub;
         } else if (role === 'admin') {
             const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+            // userId is resolved for both roles but not yet persisted on the connection item
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
             userId = payload.sub;
         } else {
             return { statusCode: 400, body: 'Invalid role' };

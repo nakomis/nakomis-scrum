@@ -10,5 +10,6 @@ web/.env.prod
 web/.env.localhost
 *.js.map
 *.d.ts
+!web/src/vite-env.d.ts
 *.tsbuildinfo
 vite.config.js
