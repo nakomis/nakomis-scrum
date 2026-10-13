@@ -34,6 +34,7 @@ export class CloudFrontStack extends cdk.Stack {
     });
 
     const distribution = new cloudfront.Distribution(this, "SiteDistribution", {
+      comment: `nakomis-scrum ${props.appDomain}: React SPA from S3, /api/* proxied to HTTP API`,
       certificate: props.certificateStack.certificate,
       domainNames: [props.appDomain],
       defaultRootObject: "index.html",
