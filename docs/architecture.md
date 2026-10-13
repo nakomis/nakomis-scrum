@@ -75,7 +75,7 @@
 | **Frontend** | React 19, Vite, TypeScript, Material UI (MUI) | Single Page Application (SPA) |
 | **Hosting** | AWS S3 + CloudFront | Static assets served via CDN |
 | **Backend API** | AWS API Gateway (HTTP API v2) | Stateless REST endpoints |
-| **Backend Logic** | AWS Lambda (Node.js 18/20, TypeScript) | Serverless functions |
+| **Backend Logic** | AWS Lambda (Node.js 22, TypeScript) | Serverless functions |
 | **Real-Time** | AWS API Gateway (WebSocket API) + Lambda | Fan-out for session events |
 | **Database** | Amazon DynamoDB | Serverless NoSQL store |
 | **Auth** | AWS Cognito User Pool | OIDC Federation enabled |

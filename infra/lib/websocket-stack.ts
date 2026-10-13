@@ -20,7 +20,7 @@ export class WebSocketStack extends cdk.Stack {
     super(scope, id, props);
 
     const bundling = { minify: true, sourceMap: true };
-    const runtime = lambda.Runtime.NODEJS_20_X;
+    const runtime = lambda.Runtime.NODEJS_22_X;
 
     const connectHandler = new nodejs.NodejsFunction(this, "ConnectHandler", {
       runtime,

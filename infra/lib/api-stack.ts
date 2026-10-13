@@ -29,7 +29,7 @@ export class ApiStack extends cdk.Stack {
     );
 
     const bundling = { minify: true, sourceMap: true };
-    const runtime = lambda.Runtime.NODEJS_20_X;
+    const runtime = lambda.Runtime.NODEJS_22_X;
 
     const sessionsHandler = new nodejs.NodejsFunction(this, "SessionsHandler", {
       entry: "lambda/api/sessions.ts",
