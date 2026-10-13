@@ -7,12 +7,24 @@ import ListItemButton from '@mui/material/ListItemButton';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from 'react-oidc-context';
 
+interface SessionSummary {
+  id: string;
+  sessionId: string;
+  status: string;
+}
+
+interface NameListSummary {
+  id: string;
+  name: string;
+  names: string[];
+}
+
 const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const auth = useAuth();
-  const [sessions, setSessions] = useState<any[]>([]);
-  const [nameLists, setNameLists] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [nameLists, setNameLists] = useState<NameListSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

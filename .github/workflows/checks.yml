@@ -1,0 +1,35 @@
+name: Lint and Type-check
+
+# Runs on every pull request; the deploy workflows call it so that pushes to
+# main (and promotions) are gated on the same checks before any deploy.
+on:
+  pull_request:
+  workflow_call:
+
+jobs:
+  lint-typecheck:
+    name: Lint and type-check (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [web, infra]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ${{ matrix.package }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --prefix ${{ matrix.package }}/
+
+      - name: Lint
+        run: npm run lint --prefix ${{ matrix.package }}/
+
+      - name: Type-check
+        run: npm run typecheck --prefix ${{ matrix.package }}/
