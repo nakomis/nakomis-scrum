@@ -22,6 +22,11 @@ import WheelOfNames from '../components/WheelOfNames';
 const AdminSessionPage: React.FC = () => {
   const { sessionId } = useParams<{ sessionId: string }>();
   const { user } = useAuth();
+  // Read the token through a ref so a silent renewal doesn't tear down the WebSocket;
+  // the token is only checked when the socket connects.
+  const tokenRef = useRef<string | undefined>(user?.access_token);
+  tokenRef.current = user?.access_token;
+  const isSignedIn = !!user?.access_token;
   const socketRef = useRef<WebSocket | null>(null);
   const [participants, setParticipants] = useState<
     { connectionId: string; displayName: string }[]
@@ -34,7 +39,7 @@ const AdminSessionPage: React.FC = () => {
   const [addNameInput, setAddNameInput] = useState<string>('');
 
   useEffect(() => {
-    const token = user?.access_token;
+    const token = tokenRef.current;
     if (token && sessionId) {
       socketRef.current = new WebSocket(
         `${import.meta.env.VITE_WS_URL}?token=${token}&sessionId=${sessionId}&role=admin`
@@ -65,7 +70,7 @@ const AdminSessionPage: React.FC = () => {
         }
       };
     }
-  }, [user, sessionId]);
+  }, [isSignedIn, sessionId]);
 
   const handleSpin = () => {
     setIsSpinning(true);
