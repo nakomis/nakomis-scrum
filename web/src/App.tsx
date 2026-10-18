@@ -9,6 +9,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import AdminSessionPage from './pages/AdminSessionPage';
 import AuthCallbackPage from './pages/AuthCallbackPage';
 import NotFoundPage from './pages/NotFoundPage';
+import TokenRefreshHandler from './auth/TokenRefreshHandler';
 
 const oidcConfig = {
   authority: import.meta.env.VITE_COGNITO_AUTHORITY,
@@ -16,6 +17,11 @@ const oidcConfig = {
   redirect_uri: import.meta.env.VITE_COGNITO_REDIRECT_URI,
   scope: 'openid profile email',
   response_type: 'code',
+  automaticSilentRenew: true,
+  // Strip ?code=&state= from the URL so a reload doesn't replay the sign-in callback.
+  onSigninCallback: () => {
+    window.history.replaceState({}, document.title, window.location.pathname);
+  },
 };
 
 const darkTheme = createTheme({
@@ -40,6 +46,7 @@ const darkTheme = createTheme({
 const App: React.FC = () => {
   return (
     <AuthProvider {...oidcConfig}>
+      <TokenRefreshHandler />
       <ThemeProvider theme={darkTheme}>
         <CssBaseline />
         <Router>
