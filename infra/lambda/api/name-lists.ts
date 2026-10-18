@@ -2,12 +2,15 @@ import { APIGatewayProxyHandlerV2, APIGatewayProxyEventV2 } from "aws-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, PutCommand, UpdateCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import * as crypto from "crypto";
+import { createLogger } from "../shared/logger";
 
 const documentClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
-export const handler: APIGatewayProxyHandlerV2 = async (event: APIGatewayProxyEventV2) => {
+export const handler: APIGatewayProxyHandlerV2 = async (event: APIGatewayProxyEventV2, context) => {
   const { routeKey, pathParameters, body } = event;
   const orgId = pathParameters?.id;
+  const logger = createLogger(context, { route: routeKey, orgId, listId: pathParameters?.listId });
+  logger.info("Handling request");
 
   if (!orgId) return { statusCode: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: "Missing orgId" }) };
 
@@ -43,7 +46,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event: APIGatewayProxyEv
         return { statusCode: 405, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: "Method not allowed" }) };
     }
   } catch (error) {
-    console.error(error);
+    logger.error("Failed to handle name-lists request", error);
     return { statusCode: 500, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: "Internal server error" }) };
   }
 };

@@ -1,12 +1,15 @@
 import { APIGatewayProxyWebsocketHandlerV2 } from "aws-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, ScanCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
+import { createLogger } from "../shared/logger";
 
 const client = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
-export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event) => {
+export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event, context) => {
+    const connectionId = event.requestContext.connectionId;
+    const logger = createLogger(context, { route: event.requestContext.routeKey, connectionId });
+    logger.info("Handling WebSocket disconnect");
     try {
-        const connectionId = event.requestContext.connectionId;
         if (!connectionId) {
             return { statusCode: 400, body: JSON.stringify({ message: "Connection ID is missing" }) };
         }
@@ -31,6 +34,7 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event) => {
 
         // Get the sessionId from the item
         const { sessionId } = result.Items[0];
+        logger.info("Removing connection", { sessionId });
 
         // Delete the item using sessionId (PK) + connectionId (SK)
         const deleteCommand = new DeleteCommand({
@@ -44,7 +48,7 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event) => {
 
         return { statusCode: 200 };
     } catch (error) {
-        console.error(error);
+        logger.error("Error handling WebSocket disconnect", error);
         return { statusCode: 500, body: JSON.stringify({ message: "Internal server error" }) };
     }
 };

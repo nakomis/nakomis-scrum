@@ -2,15 +2,18 @@ import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import * as crypto from 'crypto';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { createLogger } from '../shared/logger';
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
 const SESSION_TABLE = process.env.SESSION_TABLE!;
 const SPIN_HISTORY_TABLE = process.env.SPIN_HISTORY_TABLE!;
 
-export const handler: APIGatewayProxyHandlerV2 = async (event) => {
+export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
   const routeKey = event.routeKey;
   const sessionId = event.pathParameters?.id;
+  const logger = createLogger(context, { route: routeKey, sessionId });
+  logger.info('Handling request');
   const authorizationHeader = event.headers.authorization ?? event.headers.Authorization ?? '';
   const jwtPayloadBase64 = authorizationHeader.split('.')[1] ?? '';
   const adminId = jwtPayloadBase64
@@ -80,7 +83,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         return { statusCode: 405, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "Method not allowed" }) };
     }
   } catch (error) {
-    console.error(error);
+    logger.error('Failed to handle sessions request', error);
     return { statusCode: 500, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "Internal server error" }) };
   }
 };
