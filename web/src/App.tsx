@@ -9,7 +9,9 @@ import AdminDashboard from './pages/AdminDashboard';
 import AdminSessionPage from './pages/AdminSessionPage';
 import AuthCallbackPage from './pages/AuthCallbackPage';
 import NotFoundPage from './pages/NotFoundPage';
+import type { User } from 'oidc-client-ts';
 import TokenRefreshHandler from './auth/TokenRefreshHandler';
+import { safeReturnTo } from './auth/returnTo';
 
 const oidcConfig = {
   authority: import.meta.env.VITE_COGNITO_AUTHORITY,
@@ -18,9 +20,14 @@ const oidcConfig = {
   scope: 'openid profile email',
   response_type: 'code',
   automaticSilentRenew: true,
-  // Strip ?code=&state= from the URL so a reload doesn't replay the sign-in callback.
-  onSigninCallback: () => {
-    window.history.replaceState({}, document.title, window.location.pathname);
+  // Strip ?code=&state= from the URL so a reload doesn't replay the sign-in callback,
+  // and return to the page the admin was on when re-authentication began. This runs
+  // before the user is marked signed in, so AuthCallbackPage's default /admin redirect
+  // doesn't fire first; the popstate tells the router about the new location.
+  onSigninCallback: (user: User | void) => {
+    const returnTo = user ? safeReturnTo(user.state) : null;
+    window.history.replaceState({}, document.title, returnTo ?? window.location.pathname);
+    if (returnTo) window.dispatchEvent(new PopStateEvent('popstate'));
   },
 };
 
