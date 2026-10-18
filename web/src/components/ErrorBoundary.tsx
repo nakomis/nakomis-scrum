@@ -1,9 +1,12 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { Box } from '@mui/material';
-import ErrorAlert from './ErrorAlert';
+import { Alert, AlertTitle, Box, Button, Stack } from '@mui/material';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
+  // Changing this clears a caught error, e.g. when the user navigates elsewhere.
+  resetKey?: string;
+  onGoHome?: () => void;
 }
 
 interface ErrorBoundaryState {
@@ -21,15 +24,42 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     console.error('Unhandled render error:', error, info.componentStack);
   }
 
+  componentDidUpdate(prevProps: ErrorBoundaryProps) {
+    if (this.state.error && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ error: null });
+    }
+  }
+
   render() {
     if (this.state.error) {
+      const { onGoHome } = this.props;
       return (
         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', p: 3 }}>
-          <ErrorAlert
-            title="Something went wrong"
-            message="An unexpected error occurred. Please try again."
-            onRetry={() => this.setState({ error: null })}
-          />
+          <Alert
+            severity="error"
+            action={(
+              <Stack direction="row" spacing={1}>
+                <Button color="inherit" size="small" onClick={() => this.setState({ error: null })}>
+                  Retry
+                </Button>
+                {onGoHome && (
+                  <Button
+                    color="inherit"
+                    size="small"
+                    onClick={() => {
+                      this.setState({ error: null });
+                      onGoHome();
+                    }}
+                  >
+                    Go home
+                  </Button>
+                )}
+              </Stack>
+            )}
+          >
+            <AlertTitle>Something went wrong</AlertTitle>
+            An unexpected error occurred. Please try again.
+          </Alert>
         </Box>
       );
     }
@@ -37,4 +67,15 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 }
 
-export default ErrorBoundary;
+// Must sit inside <Router>: resets the boundary on navigation and offers a way home.
+const RoutedErrorBoundary: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  return (
+    <ErrorBoundary resetKey={location.key} onGoHome={() => navigate('/')}>
+      {children}
+    </ErrorBoundary>
+  );
+};
+
+export default RoutedErrorBoundary;

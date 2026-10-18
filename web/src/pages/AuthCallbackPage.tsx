@@ -14,13 +14,18 @@ const AuthCallbackPage: React.FC = () => {
     }
   }, [auth.isLoading, auth.isAuthenticated, navigate]);
 
+  // The raw OIDC error is for developers; the admin sees a plain message.
+  useEffect(() => {
+    if (auth.error) console.error('Sign-in callback failed:', auth.error);
+  }, [auth.error]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#282c34' }}>
       {auth.isLoading && <CircularProgress />}
       {auth.error && (
         <ErrorAlert
           title="Sign-in failed"
-          message={auth.error.message}
+          message="We couldn't complete sign-in. Please try again."
           onRetry={() => auth.signinRedirect()}
           retryLabel="Try again"
         />

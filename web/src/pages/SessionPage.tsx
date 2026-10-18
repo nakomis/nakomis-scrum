@@ -9,7 +9,7 @@ const SessionPage: React.FC = () => {
   const location = useLocation();
   const { displayName, token } = (location.state || {}) as { displayName: string; token: string };
   const [names, setNames] = useState<string[]>([]);
-  const [participants, setParticipants] = useState<string[]>([]);
+  const [participants, setParticipants] = useState<{ connectionId: string; displayName: string }[]>([]);
   const [isSpinning, setIsSpinning] = useState<boolean>(false);
   const [winner, setWinner] = useState<string | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
@@ -21,6 +21,10 @@ const SessionPage: React.FC = () => {
 
     const socketUrl = `${import.meta.env.VITE_WS_URL}?sessionId=${sessionId}&displayName=${encodeURIComponent(displayName)}&token=${token}&role=participant`;
     setConnection('connecting');
+    // Spin results missed whilst disconnected would leave the wheel stuck spinning;
+    // participants are kept (the server doesn't replay them) and de-duplicated.
+    setIsSpinning(false);
+    setWinner(null);
     const socket = new WebSocket(socketUrl);
     socketRef.current = socket;
 
@@ -45,7 +49,11 @@ const SessionPage: React.FC = () => {
           setIsSpinning(false);
           break;
         case 'participant_joined':
-          setParticipants((prev) => [...prev, data.displayName]);
+          setParticipants((prev) =>
+            prev.some((p) => p.connectionId === data.connectionId)
+              ? prev
+              : [...prev, { connectionId: data.connectionId, displayName: data.displayName }]
+          );
           break;
         case 'names_updated':
           setNames(data.names as string[]);
@@ -103,8 +111,8 @@ const SessionPage: React.FC = () => {
         )}
         <WheelOfNames names={names} isSpinning={isSpinning} winner={winner} />
         <Stack direction="row" flexWrap="wrap" spacing={1} useFlexGap mt={2}>
-          {participants.map((participant, index) => (
-            <Chip key={index} label={participant} variant="outlined" sx={{ maxWidth: '100%' }} />
+          {participants.map((participant) => (
+            <Chip key={participant.connectionId} label={participant.displayName} variant="outlined" sx={{ maxWidth: '100%' }} />
           ))}
         </Stack>
         {!isSpinning && !winner && (

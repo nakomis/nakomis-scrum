@@ -21,10 +21,12 @@ import {
 import DeleteIcon from '@mui/icons-material/Delete';
 import WheelOfNames from '../components/WheelOfNames';
 import ErrorAlert from '../components/ErrorAlert';
+import { currentReturnTo, type SigninState } from '../auth/returnTo';
 
 const AdminSessionPage: React.FC = () => {
   const { sessionId } = useParams<{ sessionId: string }>();
-  const { user } = useAuth();
+  const auth = useAuth();
+  const { user } = auth;
   // Read the token through a ref so a silent renewal doesn't tear down the WebSocket;
   // the token is only checked when the socket connects.
   const tokenRef = useRef<string | undefined>(user?.access_token);
@@ -49,6 +51,11 @@ const AdminSessionPage: React.FC = () => {
     const token = tokenRef.current;
     if (token && sessionId) {
       setConnection('connecting');
+      // Spin results missed whilst disconnected would leave the wheel stuck spinning.
+      // The server doesn't replay the roster on connect, so participants are kept and
+      // de-duplicated by connection ID rather than cleared.
+      setIsSpinning(false);
+      setWinner(null);
       const socket = new WebSocket(
         `${import.meta.env.VITE_WS_URL}?token=${token}&sessionId=${sessionId}&role=admin`
       );
@@ -71,10 +78,11 @@ const AdminSessionPage: React.FC = () => {
         }
         switch (data.type) {
           case 'participant_joined':
-            setParticipants((prev) => [
-              ...prev,
-              { connectionId: data.connectionId, displayName: data.displayName },
-            ]);
+            setParticipants((prev) =>
+              prev.some((p) => p.connectionId === data.connectionId)
+                ? prev
+                : [...prev, { connectionId: data.connectionId, displayName: data.displayName }]
+            );
             break;
           case 'spin_result':
             setWinner(data.winner);
@@ -160,19 +168,44 @@ const AdminSessionPage: React.FC = () => {
           <Button
             color="inherit"
             onClick={generateMagicLink}
-            disabled={linkLoading}
+            disabled={linkLoading || !isSignedIn}
             startIcon={linkLoading ? <CircularProgress size={16} color="inherit" /> : undefined}
           >
             Share Link
           </Button>
         </Toolbar>
       </AppBar>
-      {connection === 'connecting' && (
+      {!isSignedIn && auth.isLoading && (
+        <Alert severity="info" icon={<CircularProgress size={18} />} sx={{ borderRadius: 0 }}>
+          Signing in…
+        </Alert>
+      )}
+      {!isSignedIn && !auth.isLoading && (
+        <Alert
+          severity="warning"
+          sx={{ borderRadius: 0 }}
+          action={(
+            <Button
+              color="inherit"
+              size="small"
+              onClick={() => {
+                const state: SigninState = { returnTo: currentReturnTo() };
+                void auth.signinRedirect({ state });
+              }}
+            >
+              Sign in
+            </Button>
+          )}
+        >
+          You are signed out. Sign in to run this session.
+        </Alert>
+      )}
+      {isSignedIn && connection === 'connecting' && (
         <Alert severity="info" icon={<CircularProgress size={18} />} sx={{ borderRadius: 0 }}>
           Connecting to session…
         </Alert>
       )}
-      {connection === 'error' && (
+      {isSignedIn && connection === 'error' && (
         <Box sx={{ px: 2 }}>
           <ErrorAlert
             message="Lost connection to the session."
@@ -242,7 +275,7 @@ const AdminSessionPage: React.FC = () => {
             variant="contained"
             color="primary"
             onClick={handleSpin}
-            disabled={isSpinning || names.length === 0 || connection !== 'open'}
+            disabled={isSpinning || names.length === 0 || !isSignedIn || connection !== 'open'}
             sx={{ marginTop: 2 }}
           >
             Spin!

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Box, Button, Typography, AppBar, Toolbar,
-  Drawer, List, ListItem, ListItemText, CircularProgress, Skeleton,
+  Drawer, List, ListItem, ListItemText, CircularProgress, Skeleton, Alert,
 } from '@mui/material';
 import ListItemButton from '@mui/material/ListItemButton';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -24,23 +24,30 @@ const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const auth = useAuth();
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [nameLists, setNameLists] = useState<NameListSummary[]>([]);
-  const [sessionsLoading, setSessionsLoading] = useState(true);
+  // null until the first successful load, so a refetch keeps showing the data it has
+  // rather than flashing skeletons.
+  const [sessions, setSessions] = useState<SessionSummary[] | null>(null);
+  const [nameLists, setNameLists] = useState<NameListSummary[] | null>(null);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
   const [nameListsLoading, setNameListsLoading] = useState(false);
   const [nameListsError, setNameListsError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const accessToken = auth.user?.access_token;
+  // Read the token through a ref so a silent renewal doesn't trigger a refetch.
+  const tokenRef = useRef(accessToken);
+  tokenRef.current = accessToken;
+  const isSignedIn = !!accessToken;
   const orgId = location.state?.orgId as string | undefined;
 
   const fetchSessions = useCallback(async () => {
+    if (!isSignedIn) return;
     setSessionsLoading(true);
     setSessionsError(null);
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/sessions`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${tokenRef.current}` },
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       setSessions(await response.json());
@@ -50,15 +57,15 @@ const AdminDashboard: React.FC = () => {
     } finally {
       setSessionsLoading(false);
     }
-  }, [accessToken]);
+  }, [isSignedIn]);
 
   const fetchNameLists = useCallback(async () => {
-    if (!orgId) return;
+    if (!orgId || !isSignedIn) return;
     setNameListsLoading(true);
     setNameListsError(null);
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/orgs/${orgId}/name-lists`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${tokenRef.current}` },
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       setNameLists(await response.json());
@@ -68,7 +75,7 @@ const AdminDashboard: React.FC = () => {
     } finally {
       setNameListsLoading(false);
     }
-  }, [accessToken, orgId]);
+  }, [isSignedIn, orgId]);
 
   useEffect(() => {
     fetchSessions();
@@ -85,7 +92,7 @@ const AdminDashboard: React.FC = () => {
       const res = await fetch(`${import.meta.env.VITE_API_URL}/sessions`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${tokenRef.current}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ name: 'New Session' }),
@@ -113,13 +120,13 @@ const AdminDashboard: React.FC = () => {
       <Drawer variant="permanent" anchor="left">
         {nameListsError && <ErrorAlert message={nameListsError} onRetry={fetchNameLists} />}
         <List>
-          {nameListsLoading
+          {nameListsLoading && !nameLists
             ? [0, 1, 2].map((i) => (
               <ListItem key={i}>
                 <ListItemText primary={<Skeleton width={120} />} secondary={<Skeleton width={60} />} />
               </ListItem>
             ))
-            : nameLists.map((list) => (
+            : (nameLists ?? []).map((list) => (
               <ListItemButton key={list.id} onClick={() => navigate(`/admin/name-list/${list.id}`)}>
                 <ListItemText primary={list.name} secondary={`Count: ${list.names.length}`} />
               </ListItemButton>
@@ -127,10 +134,23 @@ const AdminDashboard: React.FC = () => {
         </List>
       </Drawer>
       <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
+        {!isSignedIn && !auth.isLoading && (
+          <Alert
+            severity="warning"
+            sx={{ mb: 2 }}
+            action={(
+              <Button color="inherit" size="small" onClick={() => void auth.signinRedirect()}>
+                Sign in
+              </Button>
+            )}
+          >
+            You are signed out. Sign in to see your sessions.
+          </Alert>
+        )}
         <Button
           variant="contained"
           onClick={createSession}
-          disabled={creating}
+          disabled={creating || !isSignedIn}
           startIcon={creating ? <CircularProgress size={16} color="inherit" /> : undefined}
         >
           Create New Session
@@ -140,13 +160,13 @@ const AdminDashboard: React.FC = () => {
           <ErrorAlert message={sessionsError} onRetry={fetchSessions} />
         ) : (
           <List>
-            {sessionsLoading
+            {(sessionsLoading || (auth.isLoading && !isSignedIn)) && !sessions
               ? [0, 1, 2].map((i) => (
                 <ListItem key={i}>
                   <ListItemText primary={<Skeleton width={240} />} secondary={<Skeleton width={100} />} />
                 </ListItem>
               ))
-              : sessions.map((session) => (
+              : (sessions ?? []).map((session) => (
                 <ListItemButton key={session.id} onClick={() => navigate(`/admin/session/${session.sessionId}`)}>
                   <ListItemText primary={`Session ID: ${session.sessionId}`} secondary={`Status: ${session.status}`} />
                 </ListItemButton>
