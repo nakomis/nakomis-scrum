@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 import { useParams } from 'react-router-dom';
 import {
@@ -21,6 +21,7 @@ import {
 import DeleteIcon from '@mui/icons-material/Delete';
 import WheelOfNames from '../components/WheelOfNames';
 import ErrorAlert from '../components/ErrorAlert';
+import SpinHistory from '../components/SpinHistory';
 import { currentReturnTo, type SigninState } from '../auth/returnTo';
 import { useReconnectingWebSocket } from '../hooks/useReconnectingWebSocket';
 
@@ -33,6 +34,7 @@ const AdminSessionPage: React.FC = () => {
   const tokenRef = useRef<string | undefined>(user?.access_token);
   tokenRef.current = user?.access_token;
   const isSignedIn = !!user?.access_token;
+  const getToken = useCallback(() => tokenRef.current, []);
   const [participants, setParticipants] = useState<
     { connectionId: string; displayName: string }[]
   >([]);
@@ -44,6 +46,7 @@ const AdminSessionPage: React.FC = () => {
   const [addNameInput, setAddNameInput] = useState<string>('');
   const [linkLoading, setLinkLoading] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
+  const [historyKey, setHistoryKey] = useState(0);
 
   const handleMessage = (event: MessageEvent) => {
     let data;
@@ -64,6 +67,7 @@ const AdminSessionPage: React.FC = () => {
       case 'spin_result':
         setWinner(data.winner);
         setIsSpinning(false);
+        setHistoryKey((k) => k + 1);
         break;
       case 'names_updated':
         setNames(data.names);
@@ -81,6 +85,8 @@ const AdminSessionPage: React.FC = () => {
       // de-duplicated by connection ID rather than cleared.
       setIsSpinning(false);
       setWinner(null);
+      // Pick up any spins that landed whilst disconnected
+      setHistoryKey((k) => k + 1);
     },
     onMessage: handleMessage,
   });
@@ -259,6 +265,9 @@ const AdminSessionPage: React.FC = () => {
           >
             Spin!
           </Button>
+          {isSignedIn && sessionId && (
+            <SpinHistory sessionId={sessionId} getToken={getToken} refreshKey={historyKey} />
+          )}
         </Box>
       </Box>
       <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>

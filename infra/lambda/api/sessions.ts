@@ -65,19 +65,29 @@ export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
           return { statusCode: 400, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "Invalid session or empty name list" }) };
         }
         const winner = session.Item.nameListSnapshot[Math.floor(Math.random() * session.Item.nameListSnapshot.length)];
+        const timestamp = Date.now();
         await ddb.send(new PutCommand({
           TableName: SPIN_HISTORY_TABLE,
-          Item: { sessionId, "timestamp#spinId": `${Date.now()}#${crypto.randomUUID()}`, winner, nameSnapshot: JSON.stringify(session.Item.nameListSnapshot), timestamp: Date.now() }
+          Item: { sessionId, "timestamp#spinId": `${timestamp}#${crypto.randomUUID()}`, winner, nameSnapshot: JSON.stringify(session.Item.nameListSnapshot), timestamp }
         }));
         return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ winner }) };
       }
       case "GET /sessions/{id}/history": {
+        // 404 rather than 403 so other admins can't probe which session IDs exist
+        const session = await ddb.send(new GetCommand({ TableName: SESSION_TABLE, Key: { sessionId } }));
+        if (!session.Item || !adminId || session.Item.adminId !== adminId) {
+          return { statusCode: 404, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "Session not found" }) };
+        }
+        // Newest 20 spins; consistent read so a refetch straight after a spin_result includes it
         const history = await ddb.send(new QueryCommand({
           TableName: SPIN_HISTORY_TABLE,
           KeyConditionExpression: 'sessionId = :sessionId',
-          ExpressionAttributeValues: { ':sessionId': sessionId }
+          ExpressionAttributeValues: { ':sessionId': sessionId },
+          ScanIndexForward: false,
+          Limit: 20,
+          ConsistentRead: true,
         }));
-        return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify(history.Items) };
+        return { statusCode: 200, headers: { "Content-Type": "application/json" }, body: JSON.stringify(history.Items ?? []) };
       }
       default:
         return { statusCode: 405, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: "Method not allowed" }) };
