@@ -15,7 +15,7 @@ interface SessionSummary {
 }
 
 interface NameListSummary {
-  id: string;
+  listId: string;
   name: string;
   names: string[];
 }
@@ -127,7 +127,10 @@ const AdminDashboard: React.FC = () => {
               </ListItem>
             ))
             : (nameLists ?? []).map((list) => (
-              <ListItemButton key={list.id} onClick={() => navigate(`/admin/name-list/${list.id}`)}>
+              <ListItemButton
+                key={list.listId}
+                onClick={() => navigate(`/admin/orgs/${orgId}/name-lists/${list.listId}`)}
+              >
                 <ListItemText primary={list.name} secondary={`Count: ${list.names.length}`} />
               </ListItemButton>
             ))}
