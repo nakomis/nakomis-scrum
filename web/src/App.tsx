@@ -7,6 +7,7 @@ import JoinSessionPage from './pages/JoinSessionPage';
 import SessionPage from './pages/SessionPage';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminSessionPage from './pages/AdminSessionPage';
+import NameListEditorPage from './pages/NameListEditorPage';
 import AuthCallbackPage from './pages/AuthCallbackPage';
 import NotFoundPage from './pages/NotFoundPage';
 import type { User } from 'oidc-client-ts';
@@ -65,6 +66,7 @@ const App: React.FC = () => {
               <Route path="/session/:sessionId" element={<SessionPage />} />
               <Route path="/admin" element={<AdminDashboard />} />
               <Route path="/admin/session/:sessionId" element={<AdminSessionPage />} />
+              <Route path="/admin/orgs/:orgId/name-lists/:listId" element={<NameListEditorPage />} />
               <Route path="/auth/callback" element={<AuthCallbackPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
