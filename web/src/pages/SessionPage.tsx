@@ -62,14 +62,16 @@ const SessionPage: React.FC = () => {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '20px',
+        padding: { xs: '8px', sm: '20px' },
+        boxSizing: 'border-box',
+        overflowX: 'hidden',
       }}
     >
-      <Paper elevation={3} sx={{ width: '100%', maxWidth: '600px', padding: '20px', backgroundColor: '#1f2329' }}>
+      <Paper elevation={3} sx={{ width: '100%', maxWidth: '600px', padding: { xs: '12px', sm: '20px' }, backgroundColor: '#1f2329', boxSizing: 'border-box' }}>
         <WheelOfNames names={names} isSpinning={isSpinning} winner={winner} />
-        <Stack direction="row" flexWrap="wrap" spacing={1} mt={2}>
+        <Stack direction="row" flexWrap="wrap" spacing={1} useFlexGap mt={2}>
           {participants.map((participant, index) => (
-            <Chip key={index} label={participant} variant="outlined" />
+            <Chip key={index} label={participant} variant="outlined" sx={{ maxWidth: '100%' }} />
           ))}
         </Stack>
         {!isSpinning && !winner && (
