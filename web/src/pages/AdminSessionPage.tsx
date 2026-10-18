@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 import { useParams } from 'react-router-dom';
 import {
@@ -22,17 +22,17 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import WheelOfNames from '../components/WheelOfNames';
 import ErrorAlert from '../components/ErrorAlert';
 import { currentReturnTo, type SigninState } from '../auth/returnTo';
+import { useReconnectingWebSocket } from '../hooks/useReconnectingWebSocket';
 
 const AdminSessionPage: React.FC = () => {
   const { sessionId } = useParams<{ sessionId: string }>();
   const auth = useAuth();
   const { user } = auth;
   // Read the token through a ref so a silent renewal doesn't tear down the WebSocket;
-  // the token is only checked when the socket connects.
+  // the token is only checked when the socket (re)connects.
   const tokenRef = useRef<string | undefined>(user?.access_token);
   tokenRef.current = user?.access_token;
   const isSignedIn = !!user?.access_token;
-  const socketRef = useRef<WebSocket | null>(null);
   const [participants, setParticipants] = useState<
     { connectionId: string; displayName: string }[]
   >([]);
@@ -42,77 +42,58 @@ const AdminSessionPage: React.FC = () => {
   const [openDialog, setOpenDialog] = useState<boolean>(false);
   const [magicLink, setMagicLink] = useState<string>('');
   const [addNameInput, setAddNameInput] = useState<string>('');
-  const [connection, setConnection] = useState<'connecting' | 'open' | 'error'>('connecting');
-  const [reconnectKey, setReconnectKey] = useState(0);
   const [linkLoading, setLinkLoading] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const token = tokenRef.current;
-    if (token && sessionId) {
-      setConnection('connecting');
+  const handleMessage = (event: MessageEvent) => {
+    let data;
+    try {
+      data = JSON.parse(event.data);
+    } catch {
+      console.error('Malformed WebSocket message:', event.data);
+      return;
+    }
+    switch (data.type) {
+      case 'participant_joined':
+        setParticipants((prev) =>
+          prev.some((p) => p.connectionId === data.connectionId)
+            ? prev
+            : [...prev, { connectionId: data.connectionId, displayName: data.displayName }]
+        );
+        break;
+      case 'spin_result':
+        setWinner(data.winner);
+        setIsSpinning(false);
+        break;
+      case 'names_updated':
+        setNames(data.names);
+        break;
+    }
+  };
+
+  const { status: connection, send, reconnect } = useReconnectingWebSocket({
+    enabled: isSignedIn && !!sessionId,
+    connectionKey: sessionId ?? '',
+    buildUrl: () => `${import.meta.env.VITE_WS_URL}?token=${tokenRef.current}&sessionId=${sessionId}&role=admin`,
+    onOpen: () => {
       // Spin results missed whilst disconnected would leave the wheel stuck spinning.
       // The server doesn't replay the roster on connect, so participants are kept and
       // de-duplicated by connection ID rather than cleared.
       setIsSpinning(false);
       setWinner(null);
-      const socket = new WebSocket(
-        `${import.meta.env.VITE_WS_URL}?token=${token}&sessionId=${sessionId}&role=admin`
-      );
-      socketRef.current = socket;
-
-      socket.onopen = () => setConnection('open');
-      socket.onerror = () => setConnection('error');
-      // Ignore close events from a socket that has already been replaced or torn down
-      socket.onclose = () => {
-        if (socketRef.current === socket) setConnection('error');
-      };
-
-      socket.onmessage = (event) => {
-        let data;
-        try {
-          data = JSON.parse(event.data);
-        } catch {
-          console.error('Malformed WebSocket message:', event.data);
-          return;
-        }
-        switch (data.type) {
-          case 'participant_joined':
-            setParticipants((prev) =>
-              prev.some((p) => p.connectionId === data.connectionId)
-                ? prev
-                : [...prev, { connectionId: data.connectionId, displayName: data.displayName }]
-            );
-            break;
-          case 'spin_result':
-            setWinner(data.winner);
-            setIsSpinning(false);
-            break;
-          case 'names_updated':
-            setNames(data.names);
-            break;
-        }
-      };
-
-      return () => {
-        socketRef.current = null;
-        socket.close();
-      };
-    }
-  }, [isSignedIn, sessionId, reconnectKey]);
+    },
+    onMessage: handleMessage,
+  });
 
   const handleSpin = () => {
-    setIsSpinning(true);
-    socketRef.current?.send(JSON.stringify({ type: 'spin', names }));
+    if (send({ type: 'spin', names })) setIsSpinning(true);
   };
 
   const handleAddName = (name: string) => {
     if (name && !names.includes(name)) {
       const updatedNames = [...names, name];
       setNames(updatedNames);
-      socketRef.current?.send(
-        JSON.stringify({ type: 'update_names', names: updatedNames })
-      );
+      send({ type: 'update_names', names: updatedNames });
     }
     setAddNameInput('');
   };
@@ -120,9 +101,7 @@ const AdminSessionPage: React.FC = () => {
   const handleDeleteName = (name: string) => {
     const updatedNames = names.filter((n) => n !== name);
     setNames(updatedNames);
-    socketRef.current?.send(
-      JSON.stringify({ type: 'update_names', names: updatedNames })
-    );
+    send({ type: 'update_names', names: updatedNames });
   };
 
   const generateMagicLink = async () => {
@@ -200,16 +179,16 @@ const AdminSessionPage: React.FC = () => {
           You are signed out. Sign in to run this session.
         </Alert>
       )}
-      {isSignedIn && connection === 'connecting' && (
+      {isSignedIn && (connection === 'connecting' || connection === 'reconnecting') && (
         <Alert severity="info" icon={<CircularProgress size={18} />} sx={{ borderRadius: 0 }}>
-          Connecting to session…
+          {connection === 'connecting' ? 'Connecting to session…' : 'Connection lost, reconnecting…'}
         </Alert>
       )}
-      {isSignedIn && connection === 'error' && (
+      {isSignedIn && connection === 'failed' && (
         <Box sx={{ px: 2 }}>
           <ErrorAlert
-            message="Lost connection to the session."
-            onRetry={() => setReconnectKey((k) => k + 1)}
+            message="Connection lost, reload to rejoin."
+            onRetry={reconnect}
             retryLabel="Reconnect"
           />
         </Box>
