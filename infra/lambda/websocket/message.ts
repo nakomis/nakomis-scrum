@@ -13,6 +13,7 @@ import {
   DeleteCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { ApiGatewayManagementApiClient, PostToConnectionCommand } from '@aws-sdk/client-apigatewaymanagementapi';
+import { createLogger } from '../shared/logger';
 
 const ddbDocClient = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const apigwClient = new ApiGatewayManagementApiClient({ endpoint: process.env.WS_CALLBACK_URL! });
@@ -148,10 +149,17 @@ async function handleUpdateNames(
   await broadcastMessage(sessionId, message);
 }
 
-export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event) => {
+export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event, context) => {
+  const logger = createLogger(context, {
+    route: event.requestContext.routeKey,
+    connectionId: event.requestContext.connectionId,
+    sessionId: sessionIdFrom(event),
+  });
   try {
     const body = JSON.parse(event.body || '{}');
     const { type, displayName, names } = body;
+    // Only the message type is logged; the body itself may carry participant names
+    logger.info('Handling WebSocket message', { action: typeof type === 'string' ? type : undefined });
 
     switch (type) {
       case 'join':
@@ -173,7 +181,7 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event) => {
 
     return { statusCode: 200, body: '' };
   } catch (error) {
-    console.error('Error handling WebSocket event:', error);
+    logger.error('Error handling WebSocket message', error);
     return {
       statusCode: 500,
       body: JSON.stringify({ error: 'Internal Server Error' }),

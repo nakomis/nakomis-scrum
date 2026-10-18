@@ -2,6 +2,7 @@ import { APIGatewayProxyWebsocketHandlerV2, APIGatewayProxyWebsocketEventV2, API
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import crypto from 'crypto';
+import { createLogger } from '../shared/logger';
 
 // $connect events carry the query string, which the WebSocket event type omits
 type ConnectEvent = APIGatewayProxyWebsocketEventV2 & {
@@ -11,9 +12,16 @@ type ConnectEvent = APIGatewayProxyWebsocketEventV2 & {
 const ddbClient = new DynamoDBClient({});
 const ddbDocClient = DynamoDBDocumentClient.from(ddbClient);
 
-export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event): Promise<APIGatewayProxyResultV2> => {
+export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event, context): Promise<APIGatewayProxyResultV2> => {
+    const qs = (event as ConnectEvent).queryStringParameters || {};
+    const logger = createLogger(context, {
+        route: event.requestContext.routeKey,
+        connectionId: event.requestContext.connectionId,
+        sessionId: qs.sessionId,
+        role: qs.role,
+    });
+    logger.info('Handling WebSocket connect');
     try {
-        const qs = (event as ConnectEvent).queryStringParameters || {};
         const { sessionId, role, token } = qs as { sessionId?: string; role?: string; token?: string };
 
         if (!sessionId || !role || !token) {
@@ -59,7 +67,7 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event): Promise
 
         return { statusCode: 200 };
     } catch (error) {
-        console.error('Error handling WebSocket connect:', error);
+        logger.error('Error handling WebSocket connect', error);
         return { statusCode: 500, body: 'Internal Server Error' };
     }
 };

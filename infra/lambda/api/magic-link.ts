@@ -1,12 +1,15 @@
 import { APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import crypto from 'crypto';
+import { createLogger } from '../shared/logger';
 
 const base64url = (buf: Buffer): string =>
   buf.toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 
-export const handler: APIGatewayProxyHandlerV2 = async (event) => {
+export const handler: APIGatewayProxyHandlerV2 = async (event, context) => {
+  const sessionId = event.pathParameters?.id;
+  const logger = createLogger(context, { route: event.routeKey, sessionId });
+  logger.info('Handling request');
   try {
-    const sessionId = event.pathParameters?.id;
     if (!sessionId) {
       return { statusCode: 400, body: JSON.stringify({ error: "Session ID is required" }) };
     }
@@ -42,7 +45,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       body: JSON.stringify({ url: magicLinkUrl, token, expiresAt: payload.exp })
     };
   } catch (error) {
-    console.error(error);
+    logger.error('Failed to create magic link', error);
     return { statusCode: 500, body: JSON.stringify({ error: "Internal Server Error" }) };
   }
 };
