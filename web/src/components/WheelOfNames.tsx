@@ -120,11 +120,17 @@ const WheelOfNames: React.FC<WheelOfNamesProps> = ({ names, isSpinning, winner, 
   }, [isSpinning, winner]);
 
   return (
-    <div style={{ backgroundColor: '#282c34', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-      <canvas ref={canvasRef} width={CANVAS_SIZE} height={CANVAS_SIZE} />
+    <div style={{ backgroundColor: '#282c34', padding: 'min(20px, 4vw)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      {/* Drawing buffer stays at CANVAS_SIZE; CSS scales it down to fit narrow screens */}
+      <canvas
+        ref={canvasRef}
+        width={CANVAS_SIZE}
+        height={CANVAS_SIZE}
+        style={{ width: '100%', maxWidth: CANVAS_SIZE, height: 'auto', aspectRatio: '1 / 1', display: 'block' }}
+      />
       {winner !== null && (
-        <Paper elevation={3} sx={{ marginTop: '16px', padding: '12px 24px', textAlign: 'center', backgroundColor: '#1f2329' }}>
-          <Typography variant="h5" color="secondary">{winner} 🎉</Typography>
+        <Paper elevation={3} sx={{ marginTop: '16px', padding: { xs: '12px 16px', sm: '12px 24px' }, textAlign: 'center', backgroundColor: '#1f2329', maxWidth: '100%', boxSizing: 'border-box' }}>
+          <Typography variant="h5" color="secondary" sx={{ overflowWrap: 'anywhere' }}>{winner} 🎉</Typography>
         </Paper>
       )}
       {onSpin && (
