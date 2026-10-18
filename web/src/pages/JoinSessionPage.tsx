@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Box, TextField, Button, Typography, Paper } from '@mui/material';
+import ErrorAlert from '../components/ErrorAlert';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 
 interface TokenPayload {
@@ -11,6 +12,7 @@ const JoinSessionPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [tokenError, setTokenError] = useState<string | null>(null);
 
   useEffect(() => {
     const token = searchParams.get('token');
@@ -25,10 +27,14 @@ const JoinSessionPage = () => {
             .join(''),
         );
         const payload: TokenPayload = JSON.parse(jsonPayload);
+        if (!payload.sessionId) throw new Error('Token has no sessionId');
         setSessionId(payload.sessionId);
       } catch {
         console.error('Invalid token');
+        setTokenError('This invite link is invalid. Please ask the session host for a new link.');
       }
+    } else {
+      setTokenError('This invite link is missing its token. Please ask the session host for a new link.');
     }
   }, [searchParams]);
 
@@ -53,6 +59,7 @@ const JoinSessionPage = () => {
         <Typography variant="h5" gutterBottom>
           Join Session
         </Typography>
+        {tokenError && <ErrorAlert message={tokenError} />}
         <TextField
           label="Display Name"
           value={displayName}
@@ -60,7 +67,7 @@ const JoinSessionPage = () => {
           margin="normal"
           required
         />
-        <Button variant="contained" color="primary" onClick={handleSubmit}>
+        <Button variant="contained" color="primary" onClick={handleSubmit} disabled={!sessionId || !displayName}>
           Join Session
         </Button>
       </Paper>

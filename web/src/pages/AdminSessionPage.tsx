@@ -4,7 +4,9 @@ import { useParams } from 'react-router-dom';
 import {
   AppBar,
   Box,
+  Alert,
   Button,
+  CircularProgress,
   Dialog,
   DialogContent,
   DialogTitle,
@@ -18,10 +20,13 @@ import {
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import WheelOfNames from '../components/WheelOfNames';
+import ErrorAlert from '../components/ErrorAlert';
+import { currentReturnTo, type SigninState } from '../auth/returnTo';
 
 const AdminSessionPage: React.FC = () => {
   const { sessionId } = useParams<{ sessionId: string }>();
-  const { user } = useAuth();
+  const auth = useAuth();
+  const { user } = auth;
   // Read the token through a ref so a silent renewal doesn't tear down the WebSocket;
   // the token is only checked when the socket connects.
   const tokenRef = useRef<string | undefined>(user?.access_token);
@@ -37,22 +42,47 @@ const AdminSessionPage: React.FC = () => {
   const [openDialog, setOpenDialog] = useState<boolean>(false);
   const [magicLink, setMagicLink] = useState<string>('');
   const [addNameInput, setAddNameInput] = useState<string>('');
+  const [connection, setConnection] = useState<'connecting' | 'open' | 'error'>('connecting');
+  const [reconnectKey, setReconnectKey] = useState(0);
+  const [linkLoading, setLinkLoading] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
 
   useEffect(() => {
     const token = tokenRef.current;
     if (token && sessionId) {
-      socketRef.current = new WebSocket(
+      setConnection('connecting');
+      // Spin results missed whilst disconnected would leave the wheel stuck spinning.
+      // The server doesn't replay the roster on connect, so participants are kept and
+      // de-duplicated by connection ID rather than cleared.
+      setIsSpinning(false);
+      setWinner(null);
+      const socket = new WebSocket(
         `${import.meta.env.VITE_WS_URL}?token=${token}&sessionId=${sessionId}&role=admin`
       );
+      socketRef.current = socket;
 
-      socketRef.current.onmessage = (event) => {
-        const data = JSON.parse(event.data);
+      socket.onopen = () => setConnection('open');
+      socket.onerror = () => setConnection('error');
+      // Ignore close events from a socket that has already been replaced or torn down
+      socket.onclose = () => {
+        if (socketRef.current === socket) setConnection('error');
+      };
+
+      socket.onmessage = (event) => {
+        let data;
+        try {
+          data = JSON.parse(event.data);
+        } catch {
+          console.error('Malformed WebSocket message:', event.data);
+          return;
+        }
         switch (data.type) {
           case 'participant_joined':
-            setParticipants((prev) => [
-              ...prev,
-              { connectionId: data.connectionId, displayName: data.displayName },
-            ]);
+            setParticipants((prev) =>
+              prev.some((p) => p.connectionId === data.connectionId)
+                ? prev
+                : [...prev, { connectionId: data.connectionId, displayName: data.displayName }]
+            );
             break;
           case 'spin_result':
             setWinner(data.winner);
@@ -65,12 +95,11 @@ const AdminSessionPage: React.FC = () => {
       };
 
       return () => {
-        if (socketRef.current) {
-          socketRef.current.close();
-        }
+        socketRef.current = null;
+        socket.close();
       };
     }
-  }, [isSignedIn, sessionId]);
+  }, [isSignedIn, sessionId, reconnectKey]);
 
   const handleSpin = () => {
     setIsSpinning(true);
@@ -97,16 +126,24 @@ const AdminSessionPage: React.FC = () => {
   };
 
   const generateMagicLink = async () => {
-    const response = await fetch(`${import.meta.env.VITE_API_URL}/sessions/${sessionId}/magic-link`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${user?.access_token}`,
-      },
-    });
-    if (response.ok) {
+    setLinkLoading(true);
+    setLinkError(null);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/sessions/${sessionId}/magic-link`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${user?.access_token}`,
+        },
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const { url } = await response.json();
       setMagicLink(url);
       setOpenDialog(true);
+    } catch (error) {
+      console.error('Failed to generate share link:', error);
+      setLinkError('Could not generate a share link.');
+    } finally {
+      setLinkLoading(false);
     }
   };
 
@@ -128,11 +165,60 @@ const AdminSessionPage: React.FC = () => {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Session
           </Typography>
-          <Button color="inherit" onClick={generateMagicLink}>
+          <Button
+            color="inherit"
+            onClick={generateMagicLink}
+            disabled={linkLoading || !isSignedIn}
+            startIcon={linkLoading ? <CircularProgress size={16} color="inherit" /> : undefined}
+          >
             Share Link
           </Button>
         </Toolbar>
       </AppBar>
+      {!isSignedIn && auth.isLoading && (
+        <Alert severity="info" icon={<CircularProgress size={18} />} sx={{ borderRadius: 0 }}>
+          Signing in…
+        </Alert>
+      )}
+      {!isSignedIn && !auth.isLoading && (
+        <Alert
+          severity="warning"
+          sx={{ borderRadius: 0 }}
+          action={(
+            <Button
+              color="inherit"
+              size="small"
+              onClick={() => {
+                const state: SigninState = { returnTo: currentReturnTo() };
+                void auth.signinRedirect({ state });
+              }}
+            >
+              Sign in
+            </Button>
+          )}
+        >
+          You are signed out. Sign in to run this session.
+        </Alert>
+      )}
+      {isSignedIn && connection === 'connecting' && (
+        <Alert severity="info" icon={<CircularProgress size={18} />} sx={{ borderRadius: 0 }}>
+          Connecting to session…
+        </Alert>
+      )}
+      {isSignedIn && connection === 'error' && (
+        <Box sx={{ px: 2 }}>
+          <ErrorAlert
+            message="Lost connection to the session."
+            onRetry={() => setReconnectKey((k) => k + 1)}
+            retryLabel="Reconnect"
+          />
+        </Box>
+      )}
+      {linkError && (
+        <Box sx={{ px: 2 }}>
+          <ErrorAlert message={linkError} onRetry={generateMagicLink} />
+        </Box>
+      )}
       <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         <WheelOfNames names={names} isSpinning={isSpinning} winner={winner} />
         <Box
@@ -189,7 +275,7 @@ const AdminSessionPage: React.FC = () => {
             variant="contained"
             color="primary"
             onClick={handleSpin}
-            disabled={isSpinning || names.length === 0}
+            disabled={isSpinning || names.length === 0 || !isSignedIn || connection !== 'open'}
             sx={{ marginTop: 2 }}
           >
             Spin!
