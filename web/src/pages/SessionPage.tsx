@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
-import { Box, Paper, Stack, Chip, Typography } from '@mui/material';
+import { Box, Paper, Stack, Chip, Typography, CircularProgress } from '@mui/material';
 import WheelOfNames from '../components/WheelOfNames';
+import ErrorAlert from '../components/ErrorAlert';
 
 const SessionPage: React.FC = () => {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -12,20 +13,32 @@ const SessionPage: React.FC = () => {
   const [isSpinning, setIsSpinning] = useState<boolean>(false);
   const [winner, setWinner] = useState<string | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const [connection, setConnection] = useState<'connecting' | 'open' | 'error'>('connecting');
+  const [reconnectKey, setReconnectKey] = useState(0);
 
   useEffect(() => {
     if (!sessionId || !displayName) return;
 
     const socketUrl = `${import.meta.env.VITE_WS_URL}?sessionId=${sessionId}&displayName=${encodeURIComponent(displayName)}&token=${token}&role=participant`;
+    setConnection('connecting');
     const socket = new WebSocket(socketUrl);
     socketRef.current = socket;
 
     socket.onopen = () => {
+      setConnection('open');
       socket.send(JSON.stringify({ type: 'join', displayName }));
     };
 
+    socket.onerror = () => setConnection('error');
+
     socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
+      let data;
+      try {
+        data = JSON.parse(event.data);
+      } catch {
+        console.error('Malformed WebSocket message:', event.data);
+        return;
+      }
       switch (data.type) {
         case 'spin_result':
           setWinner(data.winner);
@@ -44,14 +57,18 @@ const SessionPage: React.FC = () => {
       }
     };
 
+    // Ignore close events from a socket that has already been replaced or torn down
     socket.onclose = () => {
+      if (socketRef.current !== socket) return;
       socketRef.current = null;
+      setConnection('error');
     };
 
     return () => {
+      socketRef.current = null;
       socket.close();
     };
-  }, [sessionId]);
+  }, [sessionId, reconnectKey]);
 
   return (
     <Box
@@ -66,6 +83,22 @@ const SessionPage: React.FC = () => {
       }}
     >
       <Paper elevation={3} sx={{ width: '100%', maxWidth: '600px', padding: '20px', backgroundColor: '#1f2329' }}>
+        {!displayName && (
+          <ErrorAlert message="No display name provided. Please join the session again using your invite link." />
+        )}
+        {displayName && connection === 'connecting' && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+            <CircularProgress size={18} />
+            <Typography variant="body2" color="text.secondary">Connecting to session…</Typography>
+          </Box>
+        )}
+        {displayName && connection === 'error' && (
+          <ErrorAlert
+            message="Lost connection to the session."
+            onRetry={() => setReconnectKey((k) => k + 1)}
+            retryLabel="Reconnect"
+          />
+        )}
         <WheelOfNames names={names} isSpinning={isSpinning} winner={winner} />
         <Stack direction="row" flexWrap="wrap" spacing={1} mt={2}>
           {participants.map((participant, index) => (

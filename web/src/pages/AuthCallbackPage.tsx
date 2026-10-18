@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { CircularProgress, Typography } from '@mui/material';
+import { CircularProgress } from '@mui/material';
+import ErrorAlert from '../components/ErrorAlert';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from 'react-oidc-context';
 
@@ -16,7 +17,14 @@ const AuthCallbackPage: React.FC = () => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#282c34' }}>
       {auth.isLoading && <CircularProgress />}
-      {auth.error && <Typography color="error">{auth.error.message}</Typography>}
+      {auth.error && (
+        <ErrorAlert
+          title="Sign-in failed"
+          message={auth.error.message}
+          onRetry={() => auth.signinRedirect()}
+          retryLabel="Try again"
+        />
+      )}
     </div>
   );
 };

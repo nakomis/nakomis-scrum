@@ -12,6 +12,7 @@ import NotFoundPage from './pages/NotFoundPage';
 import type { User } from 'oidc-client-ts';
 import TokenRefreshHandler from './auth/TokenRefreshHandler';
 import { safeReturnTo } from './auth/returnTo';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const oidcConfig = {
   authority: import.meta.env.VITE_COGNITO_AUTHORITY,
@@ -57,15 +58,17 @@ const App: React.FC = () => {
       <ThemeProvider theme={darkTheme}>
         <CssBaseline />
         <Router>
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/join" element={<JoinSessionPage />} />
-            <Route path="/session/:sessionId" element={<SessionPage />} />
-            <Route path="/admin" element={<AdminDashboard />} />
-            <Route path="/admin/session/:sessionId" element={<AdminSessionPage />} />
-            <Route path="/auth/callback" element={<AuthCallbackPage />} />
-            <Route path="*" element={<NotFoundPage />} />
-          </Routes>
+          <ErrorBoundary>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/join" element={<JoinSessionPage />} />
+              <Route path="/session/:sessionId" element={<SessionPage />} />
+              <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/admin/session/:sessionId" element={<AdminSessionPage />} />
+              <Route path="/auth/callback" element={<AuthCallbackPage />} />
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          </ErrorBoundary>
         </Router>
       </ThemeProvider>
     </AuthProvider>
