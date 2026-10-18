@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import { Box, Paper, Stack, Chip, Typography, CircularProgress } from '@mui/material';
 import WheelOfNames from '../components/WheelOfNames';
 import ErrorAlert from '../components/ErrorAlert';
+import { useReconnectingWebSocket } from '../hooks/useReconnectingWebSocket';
 
 const SessionPage: React.FC = () => {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -12,71 +13,50 @@ const SessionPage: React.FC = () => {
   const [participants, setParticipants] = useState<{ connectionId: string; displayName: string }[]>([]);
   const [isSpinning, setIsSpinning] = useState<boolean>(false);
   const [winner, setWinner] = useState<string | null>(null);
-  const socketRef = useRef<WebSocket | null>(null);
-  const [connection, setConnection] = useState<'connecting' | 'open' | 'error'>('connecting');
-  const [reconnectKey, setReconnectKey] = useState(0);
+  const handleMessage = (event: MessageEvent) => {
+    let data;
+    try {
+      data = JSON.parse(event.data);
+    } catch {
+      console.error('Malformed WebSocket message:', event.data);
+      return;
+    }
+    switch (data.type) {
+      case 'spin_result':
+        setWinner(data.winner);
+        setIsSpinning(false);
+        break;
+      case 'participant_joined':
+        setParticipants((prev) =>
+          prev.some((p) => p.connectionId === data.connectionId)
+            ? prev
+            : [...prev, { connectionId: data.connectionId, displayName: data.displayName }]
+        );
+        break;
+      case 'names_updated':
+        setNames(data.names as string[]);
+        break;
+      case 'spin_started':
+        setIsSpinning(true);
+        setWinner(null);
+        break;
+    }
+  };
 
-  useEffect(() => {
-    if (!sessionId || !displayName) return;
-
-    const socketUrl = `${import.meta.env.VITE_WS_URL}?sessionId=${sessionId}&displayName=${encodeURIComponent(displayName)}&token=${token}&role=participant`;
-    setConnection('connecting');
-    // Spin results missed whilst disconnected would leave the wheel stuck spinning;
-    // participants are kept (the server doesn't replay them) and de-duplicated.
-    setIsSpinning(false);
-    setWinner(null);
-    const socket = new WebSocket(socketUrl);
-    socketRef.current = socket;
-
-    socket.onopen = () => {
-      setConnection('open');
+  const { status: connection, reconnect } = useReconnectingWebSocket({
+    enabled: !!sessionId && !!displayName,
+    connectionKey: sessionId ?? '',
+    buildUrl: () =>
+      `${import.meta.env.VITE_WS_URL}?sessionId=${sessionId}&displayName=${encodeURIComponent(displayName)}&token=${token}&role=participant`,
+    onOpen: (socket) => {
+      // Spin results missed whilst disconnected would leave the wheel stuck spinning;
+      // participants are kept (the server doesn't replay them) and de-duplicated.
+      setIsSpinning(false);
+      setWinner(null);
       socket.send(JSON.stringify({ type: 'join', displayName }));
-    };
-
-    socket.onerror = () => setConnection('error');
-
-    socket.onmessage = (event) => {
-      let data;
-      try {
-        data = JSON.parse(event.data);
-      } catch {
-        console.error('Malformed WebSocket message:', event.data);
-        return;
-      }
-      switch (data.type) {
-        case 'spin_result':
-          setWinner(data.winner);
-          setIsSpinning(false);
-          break;
-        case 'participant_joined':
-          setParticipants((prev) =>
-            prev.some((p) => p.connectionId === data.connectionId)
-              ? prev
-              : [...prev, { connectionId: data.connectionId, displayName: data.displayName }]
-          );
-          break;
-        case 'names_updated':
-          setNames(data.names as string[]);
-          break;
-        case 'spin_started':
-          setIsSpinning(true);
-          setWinner(null);
-          break;
-      }
-    };
-
-    // Ignore close events from a socket that has already been replaced or torn down
-    socket.onclose = () => {
-      if (socketRef.current !== socket) return;
-      socketRef.current = null;
-      setConnection('error');
-    };
-
-    return () => {
-      socketRef.current = null;
-      socket.close();
-    };
-  }, [sessionId, reconnectKey]);
+    },
+    onMessage: handleMessage,
+  });
 
   return (
     <Box
@@ -96,16 +76,18 @@ const SessionPage: React.FC = () => {
         {!displayName && (
           <ErrorAlert message="No display name provided. Please join the session again using your invite link." />
         )}
-        {displayName && connection === 'connecting' && (
+        {displayName && (connection === 'connecting' || connection === 'reconnecting') && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
             <CircularProgress size={18} />
-            <Typography variant="body2" color="text.secondary">Connecting to session…</Typography>
+            <Typography variant="body2" color="text.secondary">
+              {connection === 'connecting' ? 'Connecting to session…' : 'Connection lost, reconnecting…'}
+            </Typography>
           </Box>
         )}
-        {displayName && connection === 'error' && (
+        {displayName && connection === 'failed' && (
           <ErrorAlert
-            message="Lost connection to the session."
-            onRetry={() => setReconnectKey((k) => k + 1)}
+            message="Connection lost, reload to rejoin."
+            onRetry={reconnect}
             retryLabel="Reconnect"
           />
         )}
