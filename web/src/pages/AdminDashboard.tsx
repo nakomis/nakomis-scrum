@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Box, Button, Typography, AppBar, Toolbar,
   Drawer, List, ListItem, ListItemText, CircularProgress, Skeleton, Alert,
+  FormControl, InputLabel, Select, MenuItem, Stack,
 } from '@mui/material';
 import ListItemButton from '@mui/material/ListItemButton';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -34,6 +35,9 @@ const AdminDashboard: React.FC = () => {
   const [nameListsError, setNameListsError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [selectedListId, setSelectedListId] = useState('');
+  // A session created whose names PATCH failed; a retry re-PATCHes it rather than creating another.
+  const pendingSessionIdRef = useRef<string | null>(null);
   const accessToken = auth.user?.access_token;
   // Read the token through a ref so a silent renewal doesn't trigger a refetch.
   const tokenRef = useRef(accessToken);
@@ -85,24 +89,58 @@ const AdminDashboard: React.FC = () => {
     fetchNameLists();
   }, [fetchNameLists]);
 
+  // Empty lists can't seed a session, so they're shown but not selectable.
+  const isSelectable = (list: NameListSummary) => list.names.length > 0;
+  // Fall back to the first non-empty list until the admin picks one, or if their pick disappears
+  // or empties on refetch.
+  const selectedList =
+    nameLists?.find((list) => list.listId === selectedListId && isSelectable(list)) ??
+    nameLists?.find(isSelectable);
+  const listsLoaded = !nameListsLoading && !nameListsError;
+  const noNameLists = listsLoaded && (!orgId || nameLists?.length === 0);
+  const allListsEmpty = listsLoaded && !!nameLists?.length && !nameLists.some(isSelectable);
+
   const createSession = async () => {
+    if (!selectedList) return;
     setCreating(true);
     setCreateError(null);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/sessions`, {
-        method: 'POST',
+      let sessionId = pendingSessionIdRef.current;
+      if (!sessionId) {
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/sessions`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${tokenRef.current}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ name: 'New Session' }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        sessionId = (await res.json()).sessionId as string;
+        pendingSessionIdRef.current = sessionId;
+      }
+      const namesRes = await fetch(`${import.meta.env.VITE_API_URL}/sessions/${sessionId}/names`, {
+        method: 'PATCH',
         headers: {
           Authorization: `Bearer ${tokenRef.current}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ name: 'New Session' }),
+        body: JSON.stringify({ names: selectedList.names }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const session = await res.json();
-      navigate(`/admin/session/${session.sessionId}`);
+      if (!namesRes.ok) {
+        // The session exists but is empty; show it in the list rather than hide it.
+        void fetchSessions();
+        throw new Error(`HTTP ${namesRes.status}`);
+      }
+      pendingSessionIdRef.current = null;
+      navigate(`/admin/session/${sessionId}`);
     } catch (error) {
       console.error('Failed to create session:', error);
-      setCreateError('Could not create a new session.');
+      setCreateError(
+        pendingSessionIdRef.current
+          ? 'The session was created but its names could not be added.'
+          : 'Could not create a new session.'
+      );
     } finally {
       setCreating(false);
     }
@@ -150,14 +188,41 @@ const AdminDashboard: React.FC = () => {
             You are signed out. Sign in to see your sessions.
           </Alert>
         )}
-        <Button
-          variant="contained"
-          onClick={createSession}
-          disabled={creating || !isSignedIn}
-          startIcon={creating ? <CircularProgress size={16} color="inherit" /> : undefined}
-        >
-          Create New Session
-        </Button>
+        <Stack direction="row" spacing={2} alignItems="center">
+          <FormControl size="small" sx={{ minWidth: 200 }} disabled={creating || !selectedList}>
+            <InputLabel id="name-list-select-label">Name list</InputLabel>
+            <Select
+              labelId="name-list-select-label"
+              label="Name list"
+              value={selectedList?.listId ?? ''}
+              onChange={(e) => setSelectedListId(e.target.value)}
+            >
+              {(nameLists ?? []).map((list) => (
+                <MenuItem key={list.listId} value={list.listId} disabled={!isSelectable(list)}>
+                  {isSelectable(list) ? list.name : `${list.name} (empty)`}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Button
+            variant="contained"
+            onClick={createSession}
+            disabled={creating || !isSignedIn || !selectedList}
+            startIcon={creating ? <CircularProgress size={16} color="inherit" /> : undefined}
+          >
+            Create New Session
+          </Button>
+        </Stack>
+        {isSignedIn && noNameLists && (
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            Create a name list first
+          </Typography>
+        )}
+        {isSignedIn && allListsEmpty && (
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            Add names to a name list first
+          </Typography>
+        )}
         {createError && <ErrorAlert message={createError} onRetry={createSession} />}
         {sessionsError ? (
           <ErrorAlert message={sessionsError} onRetry={fetchSessions} />
