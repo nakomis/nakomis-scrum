@@ -108,14 +108,14 @@ async function handleSpin(
   }
 
   const winner = names[Math.floor(Math.random() * names.length)];
-  const timestamp = Date.now().toString();
+  const timestamp = Date.now();
   const spinId = crypto.randomUUID();
 
   await ddbDocClient.send(new PutCommand({
     TableName: SPIN_HISTORY_TABLE,
     Item: {
       sessionId,
-      sk: `${timestamp}#${spinId}`,
+      'timestamp#spinId': `${timestamp}#${spinId}`,
       winner,
       nameSnapshot: JSON.stringify(names),
       timestamp,
