@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Box, Button, Typography, AppBar, Toolbar,
   Drawer, List, ListItem, ListItemText, CircularProgress, Skeleton, Alert,
+  FormControl, InputLabel, Select, MenuItem, Stack,
 } from '@mui/material';
 import ListItemButton from '@mui/material/ListItemButton';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -34,6 +35,7 @@ const AdminDashboard: React.FC = () => {
   const [nameListsError, setNameListsError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [selectedListId, setSelectedListId] = useState('');
   const accessToken = auth.user?.access_token;
   // Read the token through a ref so a silent renewal doesn't trigger a refetch.
   const tokenRef = useRef(accessToken);
@@ -85,7 +87,12 @@ const AdminDashboard: React.FC = () => {
     fetchNameLists();
   }, [fetchNameLists]);
 
+  // Fall back to the first list until the admin picks one, or if their pick disappears on refetch.
+  const selectedList = nameLists?.find((list) => list.id === selectedListId) ?? nameLists?.[0];
+  const noNameLists = !nameListsLoading && !nameListsError && (!orgId || nameLists?.length === 0);
+
   const createSession = async () => {
+    if (!selectedList) return;
     setCreating(true);
     setCreateError(null);
     try {
@@ -99,6 +106,19 @@ const AdminDashboard: React.FC = () => {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const session = await res.json();
+      const namesRes = await fetch(`${import.meta.env.VITE_API_URL}/sessions/${session.sessionId}/names`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${tokenRef.current}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ names: selectedList.names }),
+      });
+      if (!namesRes.ok) {
+        // The session exists but is empty; show it in the list rather than hide it.
+        void fetchSessions();
+        throw new Error(`HTTP ${namesRes.status}`);
+      }
       navigate(`/admin/session/${session.sessionId}`);
     } catch (error) {
       console.error('Failed to create session:', error);
@@ -150,14 +170,34 @@ const AdminDashboard: React.FC = () => {
             You are signed out. Sign in to see your sessions.
           </Alert>
         )}
-        <Button
-          variant="contained"
-          onClick={createSession}
-          disabled={creating || !isSignedIn}
-          startIcon={creating ? <CircularProgress size={16} color="inherit" /> : undefined}
-        >
-          Create New Session
-        </Button>
+        <Stack direction="row" spacing={2} alignItems="center">
+          <FormControl size="small" sx={{ minWidth: 200 }} disabled={creating || !nameLists?.length}>
+            <InputLabel id="name-list-select-label">Name list</InputLabel>
+            <Select
+              labelId="name-list-select-label"
+              label="Name list"
+              value={selectedList?.id ?? ''}
+              onChange={(e) => setSelectedListId(e.target.value)}
+            >
+              {(nameLists ?? []).map((list) => (
+                <MenuItem key={list.id} value={list.id}>{list.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Button
+            variant="contained"
+            onClick={createSession}
+            disabled={creating || !isSignedIn || !selectedList}
+            startIcon={creating ? <CircularProgress size={16} color="inherit" /> : undefined}
+          >
+            Create New Session
+          </Button>
+        </Stack>
+        {isSignedIn && noNameLists && (
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            Create a name list first
+          </Typography>
+        )}
         {createError && <ErrorAlert message={createError} onRetry={createSession} />}
         {sessionsError ? (
           <ErrorAlert message={sessionsError} onRetry={fetchSessions} />
