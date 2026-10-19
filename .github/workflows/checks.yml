@@ -9,8 +9,11 @@ on:
 permissions:
   contents: read
 
+# When called from a deploy workflow, github.workflow is the caller's name, so a
+# group built from it would equal the caller's own group and GitHub would cancel
+# the run as a deadlock. Prefix it so the called checks never share that group.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: checks-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
