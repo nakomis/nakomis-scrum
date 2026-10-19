@@ -1,0 +1,43 @@
+name: Synth
+
+# Validates the CDK app against the sandbox account on every pull request.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  synth:
+    name: Synth (sandbox)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+
+      - name: Configure AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_SANDBOX_ROLE_ARN }}
+          aws-region: eu-west-2
+
+      - name: Install dependencies in infra/
+        run: npm ci --prefix infra/
+
+      - name: Seed placeholder web build
+        run: mkdir -p web/dist && echo '<!doctype html>' > web/dist/index.html
+
+      - name: Synthesise
+        run: npm run ci-synth-sandbox --prefix infra/
