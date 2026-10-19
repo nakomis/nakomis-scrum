@@ -1,10 +1,17 @@
-name: Lint and Type-check
+name: CI
 
 # Runs on every pull request; the deploy workflows call it so that pushes to
 # main (and promotions) are gated on the same checks before any deploy.
 on:
   pull_request:
   workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   lint-typecheck:
@@ -16,10 +23,10 @@ jobs:
         package: [web, infra]
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
@@ -33,3 +40,43 @@ jobs:
 
       - name: Type-check
         run: npm run typecheck --prefix ${{ matrix.package }}/
+
+  test:
+    name: Test and build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            infra/package-lock.json
+            web/package-lock.json
+
+      - name: Install dependencies in infra/
+        run: npm ci --prefix infra/
+
+      - name: Run tests in infra/
+        run: npm test --prefix infra/
+
+      - name: Install dependencies in web/
+        run: npm ci --prefix web/
+
+      - name: Build web app
+        run: npm run build --prefix web/
+
+  ci-status:
+    name: CI Status
+    if: always()
+    needs: [lint-typecheck, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any required job did not succeed
+        run: |
+          for r in "${{ needs.lint-typecheck.result }}" "${{ needs.test.result }}"; do
+            if [[ "$r" != "success" ]]; then echo "A required job finished as: $r"; exit 1; fi
+          done

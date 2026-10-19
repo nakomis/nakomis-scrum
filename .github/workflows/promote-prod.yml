@@ -8,75 +8,64 @@ on:
         required: true
         type: string
 
+
+permissions:
+  contents: read
+  id-token: write
+
+# Deploys queue behind each other rather than racing.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  test:
+  checks:
+    uses: ./.github/workflows/checks.yml
+    permissions:
+      contents: read
+
+  deploy:
+    name: Deploy (prod)
     runs-on: ubuntu-latest
+    needs: [checks]
+    environment: production
+    if: github.event.inputs.confirm == 'PROMOTE'
+    env:
+      NPM_ENVIRONMENT: prod
+      CI: 'true'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            infra/package-lock.json
+            web/package-lock.json
+
+      - name: Configure AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_PROD_ROLE_ARN }}
+          aws-region: eu-west-2
 
       - name: Install dependencies in infra/
         run: npm ci --prefix infra/
-
-      - name: Run tests in infra/
-        run: npm test --prefix infra/
 
       - name: Install dependencies in web/
         run: npm ci --prefix web/
 
-      - name: Build web app
-        run: npm run build --prefix web/
+      # The SPA's config comes from the backend stacks' outputs, so deploy those
+      # first, then build the web app, then deploy the CloudFront stack (whose
+      # BucketDeployment uploads web/dist and invalidates the distribution).
+      - name: Deploy backend stacks and CI role
+        run: npm run ci-deploy-prod --prefix infra/ -- NakomisScrumGithubCi NakomisScrumCognito NakomisScrumApi NakomisScrumWebSocket
 
-  checks:
-    uses: ./.github/workflows/checks.yml
+      - name: Build web app for prod
+        run: npm run build:prod --prefix web/
 
-  deploy:
-    runs-on: ubuntu-latest
-    needs: [test, checks]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Configure AWS credentials using OIDC
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_PROD_ROLE_ARN }}
-          aws-region: eu-west-2
-
-      - name: Install CDK globally
-        run: npm install -g aws-cdk
-
-      - name: Install dependencies in infra/
-        run: npm ci --prefix infra/
-
-      - name: Build infra app
-        run: npm run build --prefix infra/
-
-      - name: Deploy CDK stack to production environment
-        if: github.event.inputs.confirm == 'PROMOTE'
-        run: npx cdk deploy --all --require-approval never
-        env:
-          CDK_ENV: prod
-          AWS_PROFILE: ''
-
-      - name: Upload web/dist to S3
-        if: github.event.inputs.confirm == 'PROMOTE'
-        run: |
-          BUCKET=$(aws cloudformation describe-stacks --stack-name NakomisScrum-Prod-CloudFront --query "Stacks[0].Outputs[?OutputKey=='BucketName'].OutputValue" --output text)
-          aws s3 sync web/dist s3://$BUCKET --delete
-
-      - name: Invalidate CloudFront distribution
-        if: github.event.inputs.confirm == 'PROMOTE'
-        run: |
-          DIST_ID=$(aws cloudformation describe-stacks --stack-name NakomisScrum-Prod-CloudFront --query "Stacks[0].Outputs[?OutputKey=='DistributionId'].OutputValue" --output text)
-          aws cloudfront create-invalidation --distribution-id $DIST_ID --paths '/*'
+      - name: Deploy CloudFront stack
+        run: npm run ci-deploy-prod --prefix infra/ -- NakomisScrumCloudFront

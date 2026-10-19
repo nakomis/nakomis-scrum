@@ -6,17 +6,25 @@ import { DynamoStack } from "../lib/dynamo-stack";
 import { ApiStack } from "../lib/api-stack";
 import { WebSocketStack } from "../lib/websocket-stack";
 import { CloudFrontStack } from "../lib/cloudfront-stack";
+import { GithubCiStack } from "../lib/github-ci-stack";
 
-if (!process.env.CDK_ENV) {
-  throw new Error("CDK_ENV must be set to 'sandbox' or 'prod'");
+const npmEnvironment = process.env.NPM_ENVIRONMENT;
+if (!npmEnvironment) {
+  throw new Error("NPM_ENVIRONMENT is not set. Use `npm run deploy-sandbox` or `npm run deploy-prod`.");
+}
+if (npmEnvironment !== "sandbox" && npmEnvironment !== "prod") {
+  throw new Error(`Unknown NPM_ENVIRONMENT "${npmEnvironment}". Must be "sandbox" or "prod".`);
 }
 
 const app = new cdk.App();
 
-const isProd = process.env.CDK_ENV === "prod";
+const deployEnv: "sandbox" | "prod" = npmEnvironment;
+const isProd = deployEnv === "prod";
+
+const accountId = isProd ? "637423226886" : "975050268859";
 
 const env: cdk.Environment = {
-  account: process.env.CDK_DEFAULT_ACCOUNT,
+  account: accountId,
   region: process.env.CDK_DEFAULT_REGION ?? "eu-west-2",
 };
 
@@ -67,6 +75,13 @@ const cloudFrontStack = new CloudFrontStack(app, "NakomisScrumCloudFront", {
   rootDomain,
 });
 
+new GithubCiStack(app, "NakomisScrumGithubCi", {
+  env,
+  deployEnv,
+  githubOidcProviderArn: `arn:aws:iam::${accountId}:oidc-provider/token.actions.githubusercontent.com`,
+  description: `GitHub Actions OIDC deploy role for nakomis-scrum (${deployEnv})`,
+});
+
 // Dependencies
 apiStack.addDependency(cognitoStack);
 apiStack.addDependency(dynamoStack);
@@ -76,4 +91,4 @@ cloudFrontStack.addDependency(certificateStack);
 const { version: infraVersion } = JSON.parse(fs.readFileSync('./version.json', 'utf-8'));
 cdk.Tags.of(app).add('MH-Project', 'nakomis-scrum');
 cdk.Tags.of(app).add('MH-Version', infraVersion);
-cdk.Tags.of(app).add('Environment', process.env.CDK_ENV ?? 'sandbox');
+cdk.Tags.of(app).add('Environment', deployEnv);

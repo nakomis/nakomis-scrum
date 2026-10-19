@@ -36,7 +36,10 @@ fi
 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 ENV_FILE="$SCRIPT_DIR/../.env.$ENV"
-export AWS_PROFILE=nakom.is-$AWS_ENV
+# In CI the OIDC credentials are already in the environment; locally pick the profile.
+if [[ -z "$CI" ]]; then
+    export AWS_PROFILE=nakom.is-$AWS_ENV
+fi
 
 echo "Configuring for environment: $ENV (AWS profile: $AWS_PROFILE)"
 
