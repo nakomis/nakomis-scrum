@@ -52,11 +52,29 @@ jobs:
           role-to-assume: ${{ vars.AWS_PROD_ROLE_ARN }}
           aws-region: eu-west-2
 
+      # Prod deploys the version sandbox last recorded, never a fresh bump.
+      - name: Use the version deployed to sandbox
+        run: |
+          RESPONSE="$(curl -sS --fail --aws-sigv4 "aws:amz:eu-west-2:execute-api" \
+            --user "${AWS_ACCESS_KEY_ID}:${AWS_SECRET_ACCESS_KEY}" \
+            -H "x-amz-security-token: ${AWS_SESSION_TOKEN}" \
+            "https://api.infra.nakomis.com/deployments/nakomis-scrum/sandbox/latest")"
+          VERSION="$(jq -r '.version // empty' <<< "$RESPONSE")"
+          if [[ -z "$VERSION" ]]; then echo "No sandbox version recorded in the tracker"; exit 1; fi
+          jq -n --arg v "$VERSION" '{version: $v}' > infra/version.json
+          cat infra/version.json
+
       - name: Install dependencies in infra/
         run: npm ci --prefix infra/
 
       - name: Install dependencies in web/
         run: npm ci --prefix web/
+
+      # cdk synthesises the whole app, and the CloudFront stack's asset is
+      # ../web/dist, so a placeholder must exist for this step. It does not ship:
+      # the CloudFront stack is not deployed until the real build below.
+      - name: Placeholder web/dist for the backend deploy
+        run: mkdir -p web/dist && echo '<!doctype html>' > web/dist/index.html
 
       # The SPA's config comes from the backend stacks' outputs, so deploy those
       # first, then build the web app, then deploy the CloudFront stack (whose
@@ -69,3 +87,10 @@ jobs:
 
       - name: Deploy CloudFront stack
         run: npm run ci-deploy-prod --prefix infra/ -- NakomisScrumCloudFront
+
+      - name: Record deployment (prod)
+        uses: nakomis/nakomis-infra/.github/actions/record-deployment@main
+        with:
+          project: nakomis-scrum
+          environment: prod
+          version-file: infra/version.json
